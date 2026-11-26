@@ -229,7 +229,7 @@ class ConversationalRAG:
             if self.retriever is None:
                 raise DocumentPortalException("No retriever set before building chain", sys)
 
-            # 1) Contextualize question with chat history
+            # 1) Question rewriter for multi-turn history
             question_rewriter = (
                 {"input": itemgetter("input"), "chat_history": itemgetter("chat_history")}
                 | self.contextualize_prompt
@@ -237,8 +237,21 @@ class ConversationalRAG:
                 | StrOutputParser()
             )
 
+            # Route: if chat_history is empty, use user input directly; otherwise rewrite
+            def route_query(input_dict: dict) -> str:
+                history = input_dict.get("chat_history") or []
+                if not history:
+                    return input_dict["input"]
+                return question_rewriter.invoke(input_dict)
+
+            async def aroute_query(input_dict: dict) -> str:
+                history = input_dict.get("chat_history") or []
+                if not history:
+                    return input_dict["input"]
+                return await question_rewriter.ainvoke(input_dict)
+
             # 2) Retrieve relevant context
-            retrieve_docs = question_rewriter | self.retriever | self._format_docs
+            retrieve_docs = route_query | self.retriever | self._format_docs
 
             # 3) Generate final answer
             self.chain = (

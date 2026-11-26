@@ -5,6 +5,10 @@ Agentic AI refers to artificial intelligence systems capable of autonomous decis
 
 ## 2. Core Architectural Pillars of Agentic AI
 Modern agentic architectures typically consist of four primary pillars:
+1. Perception and Goal Formulation
+2. Planning and Reasoning
+3. Memory Systems
+4. Action Execution and Tool Use
 
 ### A. Perception and Goal Formulation
 Agents interpret multi-modal inputs, including user instructions, environmental state observations, and real-time streaming data. The agent extracts high-level objectives, decomposes ambiguous requirements into actionable tasks, and defines measurable success criteria.

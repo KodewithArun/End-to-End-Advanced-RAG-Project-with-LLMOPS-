@@ -2,20 +2,25 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 contextualize_question_prompt = ChatPromptTemplate.from_messages([
     ("system", (
-        "Given a conversation history and the most recent user query, rewrite the query as a standalone question "
-        "that makes sense without relying on the previous context. Do not provide an answer—only reformulate the "
-        "question if necessary; otherwise, return it unchanged."
+        "Given a chat history and the latest user question which might reference context in the chat history, "
+        "formulate a standalone question which can be understood without the chat history. Do NOT answer the question, "
+        "just reformulate it if needed and otherwise return it as is."
     )),
     MessagesPlaceholder("chat_history"),
     ("human", "{input}"),
 ])
 
-# Prompt for answering based on context
+# Professional, human-friendly, grounded QA prompt
 context_qa_prompt = ChatPromptTemplate.from_messages([
     ("system", (
-        "You are an assistant designed to answer questions using the provided context. Rely only on the retrieved "
-        "information to form your response. If the answer is not found in the context, respond with 'I don't know.' "
-        "Keep your answer concise and no longer than three sentences.\n\n{context}"
+        "You are an expert, helpful AI assistant. Answer the user's question clearly, accurately, and naturally "
+        "based directly on the context provided below.\n\n"
+        "- Base your answer directly on the retrieved context.\n"
+        "- Format your response with clean bullet points or structured paragraphs for high human readability.\n"
+        "- If only partial information is available in the context, provide what is known and clarify what is omitted.\n"
+        "- If the topic is completely absent from the context, respond: 'I don't know based on the provided documents.'\n"
+        "- Do not fabricate or invent facts outside the context.\n\n"
+        "Context:\n{context}"
     )),
     MessagesPlaceholder("chat_history"),
     ("human", "{input}"),
