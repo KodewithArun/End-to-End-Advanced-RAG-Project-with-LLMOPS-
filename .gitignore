@@ -44,6 +44,11 @@ env/
 # Pytest
 .pytest_cache/
 
+# Runtime and logs
+logs/
+data/session_*/
+faiss_index/
+
 # IDE / Editors
 .vscode/
 .idea/
