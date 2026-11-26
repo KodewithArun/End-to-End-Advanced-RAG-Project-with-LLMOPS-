@@ -37,7 +37,12 @@
                 <span id="health-badge" class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Systems Active
                 </span>
-                <span class="text-xs text-gray-500">Session: <code id="session-display" class="bg-gray-800 px-2 py-0.5 rounded text-indigo-400 font-mono">default</code></span>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-500">Session: <code id="session-display" class="bg-gray-800 px-2 py-0.5 rounded text-indigo-400 font-mono">default</code></span>
+                    <button id="new-session-btn" title="Start a fresh session" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-0.5 rounded border border-gray-700 transition">
+                        🔄 New
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -135,7 +140,7 @@
                 <form id="chat-form" class="flex gap-3">
                     <input type="text" id="query-input" placeholder="Ask a question about your ingested documents..." autocomplete="off"
                         class="flex-1 bg-gray-950 border border-gray-700 focus:border-indigo-500 focus:outline-none rounded-xl px-4 py-3 text-xs text-gray-100 placeholder-gray-500 transition">
-                    <button type="submit" id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 rounded-xl text-xs transition flex items-center gap-2 shrink-0">
+                    <button type="submit" id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 rounded-xl text-xs transition flex items-center gap-2 shrink-0 disabled:opacity-50">
                         <span>Send</span>
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
@@ -149,8 +154,24 @@
 
     <!-- Client Script -->
     <script>
-        const sessionId = "session_" + Math.random().toString(36).substring(2, 10);
+        // Persistent session id across reloads
+        let sessionId = localStorage.getItem("rag_session_id");
+        if (!sessionId) {
+            sessionId = "session_" + Math.random().toString(36).substring(2, 10);
+            localStorage.setItem("rag_session_id", sessionId);
+        }
         document.getElementById("session-display").innerText = sessionId;
+
+        document.getElementById("new-session-btn").onclick = () => {
+            sessionId = "session_" + Math.random().toString(36).substring(2, 10);
+            localStorage.setItem("rag_session_id", sessionId);
+            document.getElementById("session-display").innerText = sessionId;
+            chatHistory = [];
+            clearBtn.click();
+            uploadStatus.classList.add("hidden");
+            selectedFilesDiv.innerHTML = "";
+            fileInput.value = "";
+        };
 
         let chatHistory = [];
         const dropZone = document.getElementById("drop-zone");
@@ -161,6 +182,7 @@
         const chatMessages = document.getElementById("chat-messages");
         const chatForm = document.getElementById("chat-form");
         const queryInput = document.getElementById("query-input");
+        const sendBtn = document.getElementById("send-btn");
         const streamToggle = document.getElementById("stream-toggle");
         const clearBtn = document.getElementById("clear-btn");
 
@@ -191,7 +213,7 @@
             }
             uploadBtn.disabled = true;
             uploadStatus.classList.remove("hidden");
-            uploadStatus.innerHTML = `<span class="text-indigo-400 animate-pulse">Indexing documents...</span>`;
+            uploadStatus.innerHTML = `<span class="text-indigo-400 animate-pulse">Indexing documents into vector store...</span>`;
 
             const formData = new FormData();
             for (let f of fileInput.files) {
@@ -233,13 +255,26 @@
             // Render Human Message
             appendHumanMessage(query);
             queryInput.value = "";
+            setGenerating(true);
 
-            if (streamToggle.checked) {
-                await executeStreamingChat(query);
-            } else {
-                await executeSyncChat(query);
+            try {
+                if (streamToggle.checked) {
+                    await executeStreamingChat(query);
+                } else {
+                    await executeSyncChat(query);
+                }
+            } finally {
+                setGenerating(false);
             }
         };
+
+        function setGenerating(isGenerating) {
+            queryInput.disabled = isGenerating;
+            sendBtn.disabled = isGenerating;
+            if (!isGenerating) {
+                queryInput.focus();
+            }
+        }
 
         function appendHumanMessage(text) {
             chatMessages.innerHTML += `
@@ -269,16 +304,16 @@
                 if (res.ok) {
                     contentDiv.innerHTML = marked.parse(data.answer);
                     badgeSpan.innerHTML = data.cache_hit 
-                        ? `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">⚡ Cached (${data.latency_ms}ms)</span>`
+                        ? `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">⚡ Semantic Cache Hit (${data.latency_ms}ms)</span>`
                         : `<span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">⏱️ ${data.latency_ms}ms</span>`;
 
                     chatHistory.push({ role: "human", content: query });
                     chatHistory.push({ role: "ai", content: data.answer });
                 } else {
-                    contentDiv.innerText = "Error: " + (data.detail || "Unable to generate answer.");
+                    contentDiv.innerHTML = `<span class="text-amber-400 font-medium">⚠️ ${data.detail || "Unable to generate answer."}</span>`;
                 }
             } catch (err) {
-                contentDiv.innerText = "Network Error: " + err.message;
+                contentDiv.innerHTML = `<span class="text-red-400">❌ Network Error: ${err.message}</span>`;
             }
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -290,6 +325,7 @@
 
             let fullText = "";
             let isCached = false;
+            let firstChunkReceived = false;
             const t0 = performance.now();
 
             try {
@@ -298,6 +334,12 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ session_id: sessionId, query: query, chat_history: chatHistory })
                 });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    contentDiv.innerHTML = `<span class="text-amber-400 font-medium">⚠️ ${err.detail || "Error generating response"}</span>`;
+                    return;
+                }
 
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder("utf-8");
@@ -314,12 +356,19 @@
                             try {
                                 const parsed = JSON.parse(line.substring(6));
                                 if (parsed.token) {
+                                    if (!firstChunkReceived) {
+                                        firstChunkReceived = true;
+                                        contentDiv.innerHTML = "";
+                                    }
                                     fullText += parsed.token;
                                     contentDiv.innerHTML = marked.parse(fullText);
                                     chatMessages.scrollTop = chatMessages.scrollHeight;
                                 }
                                 if (parsed.cached) {
                                     isCached = true;
+                                }
+                                if (parsed.error) {
+                                    contentDiv.innerHTML = `<span class="text-amber-400 font-medium">⚠️ ${parsed.error}</span>`;
                                 }
                             } catch (_) {}
                         }
@@ -328,15 +377,20 @@
 
                 const t1 = performance.now();
                 const elapsed = Math.round(t1 - t0);
-                badgeSpan.innerHTML = isCached
-                    ? `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">⚡ Semantic Cache Hit (${elapsed}ms)</span>`
-                    : `<span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">⏱️ Streamed (${elapsed}ms)</span>`;
 
-                chatHistory.push({ role: "human", content: query });
-                chatHistory.push({ role: "ai", content: fullText });
+                if (!fullText.trim()) {
+                    contentDiv.innerHTML = `<span class="text-gray-400">No response generated. Please ensure your documents are indexed.</span>`;
+                } else {
+                    badgeSpan.innerHTML = isCached
+                        ? `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">⚡ Semantic Cache Hit (${elapsed}ms)</span>`
+                        : `<span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">⏱️ Streamed (${elapsed}ms)</span>`;
+
+                    chatHistory.push({ role: "human", content: query });
+                    chatHistory.push({ role: "ai", content: fullText });
+                }
 
             } catch (err) {
-                contentDiv.innerText = "Streaming Error: " + err.message;
+                contentDiv.innerHTML = `<span class="text-red-400">❌ Streaming Error: ${err.message}</span>`;
             }
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -347,7 +401,7 @@
             div.innerHTML = `
                 <div class="w-8 h-8 rounded-full bg-indigo-600/30 text-indigo-400 flex items-center justify-center shrink-0 text-xs font-bold border border-indigo-500/20">AI</div>
                 <div class="bg-gray-800/70 border border-gray-700/50 rounded-2xl p-4 text-xs text-gray-200 leading-relaxed shadow-sm w-full">
-                    <div class="chat-bubble-ai chat-content"><span class="animate-pulse">Thinking...</span></div>
+                    <div class="chat-bubble-ai chat-content"><span class="animate-pulse text-gray-400">Thinking...</span></div>
                     <div class="meta-badge mt-2 text-[10px]"></div>
                 </div>`;
             chatMessages.appendChild(div);

@@ -88,9 +88,15 @@ def get_or_create_rag(session_id: str) -> ConversationalRAG:
 
     vs = get_session_vector_store(session_id)
     if vs is None:
+        # Fallback to the most recent active session if available
+        if SESSION_VECTOR_STORES:
+            last_sid = list(SESSION_VECTOR_STORES.keys())[-1]
+            log.info("Session not found; falling back to active session", requested=session_id, fallback=last_sid)
+            return get_or_create_rag(last_sid)
+
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No document index found for session '{session_id}'. Please upload documents first.",
+            detail="No documents have been indexed yet. Please upload at least one document (.pdf, .docx, .txt) using the left panel.",
         )
 
     rag = ConversationalRAG(
@@ -230,7 +236,14 @@ async def chat_stream(request: ChatRequest):
     Server-Sent Events (SSE) streaming endpoint.
     Streams answer tokens in real time directly from Groq LLM.
     """
-    rag = get_or_create_rag(request.session_id)
+    try:
+        rag = get_or_create_rag(request.session_id)
+    except HTTPException as e:
+        async def err_generator():
+            msg = f"⚠️ {e.detail}"
+            data = json.dumps({"token": msg, "cached": False, "done": True})
+            yield f"data: {data}\n\n"
+        return StreamingResponse(err_generator(), media_type="text/event-stream")
 
     history_messages = []
     for msg in request.chat_history:
@@ -260,14 +273,14 @@ async def chat_stream(request: ChatRequest):
 
             # Store in cache once finished
             full_ans = "".join(collected_tokens)
-            if rag.enable_cache and rag.cache:
+            if rag.enable_cache and rag.cache and full_ans.strip():
                 emb = rag.embeddings.embed_query(request.query)
                 rag.cache.store(request.query, emb, full_ans)
 
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
             log.error("Error during streaming response", error=str(e))
-            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+            yield f"data: {json.dumps({'token': f'❌ Error: {str(e)}', 'error': str(e), 'done': True})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
