@@ -25,7 +25,7 @@ def test_fastapi_backend():
     print("\n[Test 2] Testing GET / (HTML UI)...")
     res = client.get("/")
     assert res.status_code == 200
-    assert "Conversational RAG Portal" in res.text
+    assert "Document Knowledge Workspace" in res.text
     print("✅ Web UI HTML successfully rendered!")
 
     # 3. Document Ingestion via Multipart Form Upload

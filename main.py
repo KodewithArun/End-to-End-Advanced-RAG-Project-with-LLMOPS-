@@ -28,8 +28,8 @@ from multi_doc_chat.utils.config_loader import load_config
 
 # Initialize FastAPI App
 app = FastAPI(
-    title="Multi-Document Advanced RAG API",
-    description="Enterprise-grade Conversational RAG with In-Memory Vector Store, FastEmbed, Groq, and Semantic Caching.",
+    title="Document Knowledge Workspace API",
+    description="Enterprise-grade Document Intelligence API with In-Memory Vector Indexing, Semantic Retrieval, and Asynchronous Streaming.",
     version="1.0.0",
 )
 

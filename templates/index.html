@@ -1,160 +1,372 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-zinc-950 text-zinc-100">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Conversational RAG Portal</title>
+    <title>Document Knowledge Workspace</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f4f4f5',
+                            100: '#e4e4e7',
+                            200: '#d4d4d8',
+                            300: '#a1a1aa',
+                            400: '#71717a',
+                            500: '#52525b',
+                            600: '#3f3f46',
+                            700: '#27272a',
+                            800: '#18181b',
+                            900: '#09090b',
+                            950: '#040406',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .chat-bubble-ai ul { list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
-        .chat-bubble-ai ol { list-style-type: decimal; margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
-        .chat-bubble-ai p { margin-bottom: 0.5rem; }
-        .chat-bubble-ai strong { font-weight: 600; color: #f3f4f6; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        /* Custom Scrollbar */
+        .workspace-scroll::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        .workspace-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .workspace-scroll::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 9999px;
+        }
+        .workspace-scroll::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+
+        /* Reading Typography Styling */
+        .reading-prose p {
+            margin-bottom: 0.85rem;
+            line-height: 1.65;
+            color: #d4d4d8;
+        }
+        .reading-prose p:last-child {
+            margin-bottom: 0;
+        }
+        .reading-prose strong {
+            font-weight: 600;
+            color: #fafafa;
+        }
+        .reading-prose ul {
+            list-style-type: disc;
+            padding-left: 1.35rem;
+            margin-top: 0.6rem;
+            margin-bottom: 0.85rem;
+            color: #d4d4d8;
+        }
+        .reading-prose ol {
+            list-style-type: decimal;
+            padding-left: 1.35rem;
+            margin-top: 0.6rem;
+            margin-bottom: 0.85rem;
+            color: #d4d4d8;
+        }
+        .reading-prose li {
+            margin-bottom: 0.35rem;
+            line-height: 1.6;
+        }
+        .reading-prose h1, .reading-prose h2, .reading-prose h3, .reading-prose h4 {
+            font-weight: 600;
+            color: #fafafa;
+            margin-top: 1.25rem;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.015em;
+        }
+        .reading-prose h1 { font-size: 1.15rem; }
+        .reading-prose h2 { font-size: 1.05rem; }
+        .reading-prose h3 { font-size: 0.95rem; }
+        .reading-prose blockquote {
+            border-left: 2px solid #3f3f46;
+            padding-left: 0.85rem;
+            color: #a1a1aa;
+            margin-top: 0.6rem;
+            margin-bottom: 0.6rem;
+            font-style: italic;
+        }
+        .reading-prose code {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #18181b;
+            color: #e4e4e7;
+            padding: 0.15rem 0.35rem;
+            border-radius: 0.25rem;
+            font-size: 0.825em;
+            border: 1px solid #27272a;
+        }
+        .reading-prose pre {
+            background-color: #121214;
+            border: 1px solid #27272a;
+            border-radius: 0.5rem;
+            padding: 0.85rem;
+            overflow-x: auto;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .reading-prose pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: #e4e4e7;
+        }
+        .reading-prose table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.75rem 0;
+            font-size: 0.85rem;
+        }
+        .reading-prose th, .reading-prose td {
+            border: 1px solid #27272a;
+            padding: 0.45rem 0.75rem;
+            text-align: left;
+        }
+        .reading-prose th {
+            background-color: #18181b;
+            font-weight: 600;
+            color: #fafafa;
+        }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
+<body class="h-full flex flex-col antialiased selection:bg-zinc-800 selection:text-zinc-100 font-sans">
 
-    <!-- Top Navigation -->
-    <header class="border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20">
-                    ⚡
+    <!-- Top Workspace Navigation Bar -->
+    <header class="border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur sticky top-0 z-40 shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+            
+            <!-- Brand / Workspace Title -->
+            <div class="flex items-center space-x-3.5">
+                <div class="w-8 h-8 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                    </svg>
                 </div>
                 <div>
-                    <h1 class="text-base font-bold text-white tracking-tight">Conversational RAG Portal</h1>
-                    <p class="text-xs text-gray-400">FastEmbed (Local) • Groq LLM • Semantic Caching</p>
+                    <h1 class="text-sm font-semibold text-zinc-100 tracking-tight">Document Knowledge Workspace</h1>
+                    <p class="text-[11px] text-zinc-500 hidden sm:block">In-Memory Semantic Index &bull; High Precision Synthesis</p>
                 </div>
             </div>
-            <div class="flex items-center space-x-3">
-                <span id="health-badge" class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Systems Active
-                </span>
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-500">Session: <code id="session-display" class="bg-gray-800 px-2 py-0.5 rounded text-indigo-400 font-mono">default</code></span>
-                    <button id="new-session-btn" title="Start a fresh session" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-0.5 rounded border border-gray-700 transition">
-                        🔄 New
+
+            <!-- Workspace Status & Session Actions -->
+            <div class="flex items-center space-x-3 text-xs">
+                <!-- Status Indicator -->
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <span class="font-medium text-[11px] text-zinc-300">Workspace Ready</span>
+                </div>
+
+                <!-- Session Identifier & Switcher -->
+                <div class="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-md px-2.5 py-1">
+                    <span class="text-zinc-500 text-[11px]">Session</span>
+                    <span id="session-display" class="font-mono text-zinc-300 font-medium text-[11px]">default</span>
+                    <button id="new-session-btn" title="Create a clean workspace session" class="ml-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded px-1.5 py-0.5 transition">
+                        Reset
                     </button>
                 </div>
             </div>
+
         </div>
     </header>
 
-    <!-- Main Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+    <!-- Workspace Main Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
 
-        <!-- Left Sidebar: Document Ingestion & Metrics -->
-        <aside class="md:col-span-1 space-y-5">
-            <!-- Upload Card -->
-            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-sm">
-                <h2 class="text-sm font-semibold text-gray-200 mb-2 flex items-center gap-2">
-                    📁 Ingest Knowledge
-                </h2>
-                <p class="text-xs text-gray-400 mb-4">Upload PDFs, DOCX, or TXT files to index into in-memory vector storage.</p>
-
-                <div id="drop-zone" class="border-2 border-dashed border-gray-700 hover:border-indigo-500 transition-colors rounded-lg p-5 text-center cursor-pointer bg-gray-950/40">
-                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt" class="hidden">
-                    <svg class="mx-auto h-8 w-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                    </svg>
-                    <span class="text-xs text-gray-300 font-medium block">Click or Drag & Drop</span>
-                    <span class="text-[11px] text-gray-500 mt-1 block">PDF, Word DOCX, TXT</span>
+        <!-- Left Column: Document Repository & Ingestion (4 cols on lg) -->
+        <aside class="lg:col-span-4 flex flex-col space-y-4">
+            
+            <!-- Ingest Card -->
+            <div class="bg-zinc-900/60 border border-zinc-800/90 rounded-xl p-4 sm:p-5 flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                        <svg class="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        Document Ingestion
+                    </h2>
+                    <span id="doc-counter" class="text-[11px] font-mono text-zinc-500">0 indexed</span>
                 </div>
 
-                <div id="selected-files" class="mt-3 space-y-1 text-xs text-gray-400 max-h-24 overflow-y-auto"></div>
+                <!-- Drag & Drop Target -->
+                <div id="drop-zone" class="border border-dashed border-zinc-700 hover:border-zinc-500 transition-colors rounded-lg p-5 text-center cursor-pointer bg-zinc-950/40 group">
+                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt" class="hidden">
+                    <div class="w-9 h-9 mx-auto rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-zinc-200 transition-colors mb-2.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                    <span class="text-xs font-medium text-zinc-300 block">Click or drag files here</span>
+                    <span class="text-[11px] text-zinc-500 mt-1 block">Supported formats: PDF, DOCX, TXT</span>
+                </div>
 
-                <button id="upload-btn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-lg text-xs transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                <!-- Staged Files Queue -->
+                <div id="selected-files" class="mt-3 space-y-1.5 text-xs text-zinc-400 max-h-36 overflow-y-auto workspace-scroll"></div>
+
+                <!-- Action Button -->
+                <button id="upload-btn" class="mt-4 w-full bg-zinc-100 hover:bg-white text-zinc-950 font-medium py-2 px-3.5 rounded-lg text-xs transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                    </svg>
                     <span>Index Documents</span>
                 </button>
-                <div id="upload-status" class="mt-2 text-xs text-center hidden"></div>
+
+                <!-- Status Feedback -->
+                <div id="upload-status" class="mt-2.5 text-xs text-center hidden"></div>
             </div>
 
-            <!-- Pipeline Status Card -->
-            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-sm space-y-3">
-                <h2 class="text-sm font-semibold text-gray-200 flex items-center gap-2">
-                    ⚙️ Architecture Info
-                </h2>
-                <div class="space-y-2 text-xs">
-                    <div class="flex justify-between py-1 border-b border-gray-800">
-                        <span class="text-gray-400">Embedding</span>
-                        <span class="text-gray-200 font-mono">FastEmbed BGE</span>
-                    </div>
-                    <div class="flex justify-between py-1 border-b border-gray-800">
-                        <span class="text-gray-400">LLM Provider</span>
-                        <span class="text-indigo-400 font-medium">Groq (OSS 20B)</span>
-                    </div>
-                    <div class="flex justify-between py-1 border-b border-gray-800">
-                        <span class="text-gray-400">Vector Store</span>
-                        <span class="text-emerald-400 font-medium">InMemoryVectorStore</span>
-                    </div>
-                    <div class="flex justify-between py-1">
-                        <span class="text-gray-400">Semantic Cache</span>
-                        <span class="text-amber-400 font-medium">Cosine (0.88 Threshold)</span>
+            <!-- Active Repository Summary -->
+            <div class="bg-zinc-900/60 border border-zinc-800/90 rounded-xl p-4 sm:p-5 flex-1 flex flex-col">
+                <div class="flex items-center justify-between mb-3 pb-2.5 border-b border-zinc-800/60">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                        <svg class="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                        </svg>
+                        Indexed Library
+                    </h3>
+                    <span id="chunks-badge" class="text-[10px] bg-zinc-800 text-zinc-400 font-mono px-2 py-0.5 rounded">0 chunks</span>
+                </div>
+
+                <!-- Document List Container -->
+                <div id="indexed-files-list" class="flex-1 overflow-y-auto workspace-scroll space-y-2 text-xs">
+                    <div id="empty-library-hint" class="py-6 text-center text-zinc-500">
+                        <p class="text-xs">No documents indexed in this session yet.</p>
+                        <p class="text-[11px] text-zinc-600 mt-1">Upload files above to begin.</p>
                     </div>
                 </div>
+
+                <!-- Technical Properties (Restrained, no model branding) -->
+                <div class="mt-4 pt-3 border-t border-zinc-800/60 space-y-1.5 text-[11px]">
+                    <div class="flex justify-between text-zinc-500">
+                        <span>Search Engine</span>
+                        <span class="text-zinc-400 font-mono">Semantic Vector Distance</span>
+                    </div>
+                    <div class="flex justify-between text-zinc-500">
+                        <span>Acceleration</span>
+                        <span class="text-zinc-400 font-mono">Cosine Similarity Cache</span>
+                    </div>
+                    <div class="flex justify-between text-zinc-500">
+                        <span>Execution Mode</span>
+                        <span class="text-zinc-400 font-mono">Asynchronous Pipeline</span>
+                    </div>
+                </div>
+
             </div>
+
         </aside>
 
-        <!-- Right Main Panel: Conversational Chat Interface -->
-        <section class="md:col-span-3 flex flex-col bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-sm h-[750px]">
+        <!-- Right Column: Document Inquiry & Reading Workspace (8 cols on lg) -->
+        <section class="lg:col-span-8 flex flex-col bg-zinc-900/60 border border-zinc-800/90 rounded-xl overflow-hidden min-h-[580px] lg:h-auto">
             
-            <!-- Chat Header -->
-            <div class="border-b border-gray-800 px-5 py-3.5 bg-gray-900/50 flex items-center justify-between">
+            <!-- Workspace Content Header -->
+            <div class="border-b border-zinc-800 px-5 py-3.5 bg-zinc-900/80 flex items-center justify-between shrink-0">
                 <div class="flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-                    <span class="text-xs font-semibold text-gray-200">Interactive Chat Stream</span>
+                    <svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                    </svg>
+                    <span class="text-xs font-semibold text-zinc-200">Document Inquiries</span>
                 </div>
-                <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 select-none">
-                        <input type="checkbox" id="stream-toggle" checked class="rounded border-gray-700 bg-gray-800 text-indigo-600 focus:ring-0">
-                        <span>Live Stream Tokens</span>
+
+                <div class="flex items-center gap-4 text-xs">
+                    <!-- Stream Toggle -->
+                    <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200 transition select-none">
+                        <input type="checkbox" id="stream-toggle" checked class="rounded border-zinc-700 bg-zinc-800 text-zinc-100 focus:ring-0 w-3.5 h-3.5">
+                        <span class="text-[11px]">Stream responses</span>
                     </label>
-                    <button id="clear-btn" class="text-xs text-gray-400 hover:text-red-400 transition">Clear</button>
+
+                    <span class="text-zinc-700">|</span>
+
+                    <!-- Clear History Button -->
+                    <button id="clear-btn" class="text-[11px] text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        Clear
+                    </button>
                 </div>
             </div>
 
-            <!-- Chat Messages Log -->
-            <div id="chat-messages" class="flex-1 p-5 overflow-y-auto space-y-4 custom-scrollbar">
-                <!-- Welcome Message -->
-                <div class="flex gap-3 max-w-3xl">
-                    <div class="w-8 h-8 rounded-full bg-indigo-600/30 text-indigo-400 flex items-center justify-center shrink-0 text-xs font-bold border border-indigo-500/20">
-                        AI
+            <!-- Reading Stream / Conversation Area -->
+            <div id="chat-messages" class="flex-1 p-5 sm:p-6 overflow-y-auto space-y-6 workspace-scroll">
+                
+                <!-- Welcome & Guidance State -->
+                <div id="initial-welcome" class="max-w-2xl mx-auto py-12 text-center">
+                    <div class="w-12 h-12 mx-auto rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mb-4">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
                     </div>
-                    <div class="bg-gray-800/70 border border-gray-700/50 rounded-2xl p-4 text-xs text-gray-200 leading-relaxed shadow-sm">
-                        👋 Welcome to the Multi-Document Conversational RAG portal! 
-                        <br><br>
-                        Upload your documents on the left panel, then ask any question. Answers are retrieved via in-memory semantic search and accelerated with real-time semantic caching.
+                    <h3 class="text-sm font-semibold text-zinc-200 tracking-tight">Ready for Document Analysis</h3>
+                    <p class="text-xs text-zinc-500 mt-1.5 max-w-md mx-auto leading-relaxed">
+                        Upload your PDF, Word, or text files on the left panel to index them. Then enter any question below to extract answers directly from the source text.
+                    </p>
+
+                    <!-- Starter Prompt Chips -->
+                    <div class="mt-6 flex flex-wrap justify-center gap-2">
+                        <button onclick="usePrompt('Give an executive summary of the indexed documents.')" class="text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition">
+                            &ldquo;Give an executive summary&rdquo;
+                        </button>
+                        <button onclick="usePrompt('What are the primary conclusions and key takeaways?')" class="text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition">
+                            &ldquo;Primary conclusions & takeaways&rdquo;
+                        </button>
+                        <button onclick="usePrompt('List all critical dates, milestones, or statistics.')" class="text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition">
+                            &ldquo;Key dates, milestones, & statistics&rdquo;
+                        </button>
                     </div>
                 </div>
+
             </div>
 
-            <!-- Chat Input Area -->
-            <div class="border-t border-gray-800 p-4 bg-gray-900/60">
-                <form id="chat-form" class="flex gap-3">
-                    <input type="text" id="query-input" placeholder="Ask a question about your ingested documents..." autocomplete="off"
-                        class="flex-1 bg-gray-950 border border-gray-700 focus:border-indigo-500 focus:outline-none rounded-xl px-4 py-3 text-xs text-gray-100 placeholder-gray-500 transition">
-                    <button type="submit" id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 rounded-xl text-xs transition flex items-center gap-2 shrink-0 disabled:opacity-50">
-                        <span>Send</span>
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <!-- Query Input Bar -->
+            <div class="border-t border-zinc-800/80 p-4 bg-zinc-950/70 shrink-0">
+                <form id="chat-form" class="relative flex items-center">
+                    <input 
+                        type="text" 
+                        id="query-input" 
+                        placeholder="Search or ask a question regarding your documents..." 
+                        autocomplete="off"
+                        class="w-full bg-zinc-900/90 border border-zinc-800 focus:border-zinc-600 focus:bg-zinc-900 focus:outline-none rounded-xl pl-4 pr-24 py-3 text-xs text-zinc-100 placeholder-zinc-500 transition duration-150"
+                    >
+                    <button 
+                        type="submit" 
+                        id="send-btn" 
+                        class="absolute right-1.5 top-1.5 bottom-1.5 bg-zinc-100 hover:bg-white text-zinc-950 font-medium px-4 rounded-lg text-xs transition duration-150 flex items-center gap-1.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        <span>Query</span>
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
                         </svg>
                     </button>
                 </form>
+                <div class="flex items-center justify-between mt-2 px-1 text-[11px] text-zinc-500">
+                    <span>Press <kbd class="font-mono bg-zinc-900 px-1 py-0.5 rounded border border-zinc-800 text-zinc-400">Enter</kbd> to submit query</span>
+                    <span id="char-status"></span>
+                </div>
             </div>
+
         </section>
 
     </main>
 
-    <!-- Client Script -->
+    <!-- Client Logic -->
     <script>
-        // Persistent session id across reloads
+        // Session ID Management
         let sessionId = localStorage.getItem("rag_session_id");
         if (!sessionId) {
             sessionId = "session_" + Math.random().toString(36).substring(2, 10);
@@ -162,18 +374,9 @@
         }
         document.getElementById("session-display").innerText = sessionId;
 
-        document.getElementById("new-session-btn").onclick = () => {
-            sessionId = "session_" + Math.random().toString(36).substring(2, 10);
-            localStorage.setItem("rag_session_id", sessionId);
-            document.getElementById("session-display").innerText = sessionId;
-            chatHistory = [];
-            clearBtn.click();
-            uploadStatus.classList.add("hidden");
-            selectedFilesDiv.innerHTML = "";
-            fileInput.value = "";
-        };
-
         let chatHistory = [];
+        let indexedFiles = [];
+
         const dropZone = document.getElementById("drop-zone");
         const fileInput = document.getElementById("file-input");
         const selectedFilesDiv = document.getElementById("selected-files");
@@ -185,14 +388,42 @@
         const sendBtn = document.getElementById("send-btn");
         const streamToggle = document.getElementById("stream-toggle");
         const clearBtn = document.getElementById("clear-btn");
+        const docCounter = document.getElementById("doc-counter");
+        const chunksBadge = document.getElementById("chunks-badge");
+        const indexedFilesList = document.getElementById("indexed-files-list");
 
-        // Drag & Drop
+        // New Session Reset
+        document.getElementById("new-session-btn").onclick = () => {
+            sessionId = "session_" + Math.random().toString(36).substring(2, 10);
+            localStorage.setItem("rag_session_id", sessionId);
+            document.getElementById("session-display").innerText = sessionId;
+            chatHistory = [];
+            indexedFiles = [];
+            docCounter.innerText = "0 indexed";
+            chunksBadge.innerText = "0 chunks";
+            indexedFilesList.innerHTML = `
+                <div id="empty-library-hint" class="py-6 text-center text-zinc-500">
+                    <p class="text-xs">No documents indexed in this session yet.</p>
+                    <p class="text-[11px] text-zinc-600 mt-1">Upload files above to begin.</p>
+                </div>`;
+            renderEmptyWelcome();
+            uploadStatus.classList.add("hidden");
+            selectedFilesDiv.innerHTML = "";
+            fileInput.value = "";
+        };
+
+        // File Drag & Drop Handlers
         dropZone.onclick = () => fileInput.click();
-        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add("border-indigo-500"); };
-        dropZone.ondragleave = () => dropZone.classList.remove("border-indigo-500");
+        dropZone.ondragover = (e) => {
+            e.preventDefault();
+            dropZone.classList.add("border-zinc-400", "bg-zinc-900/60");
+        };
+        dropZone.ondragleave = () => {
+            dropZone.classList.remove("border-zinc-400", "bg-zinc-900/60");
+        };
         dropZone.ondrop = (e) => {
             e.preventDefault();
-            dropZone.classList.remove("border-indigo-500");
+            dropZone.classList.remove("border-zinc-400", "bg-zinc-900/60");
             fileInput.files = e.dataTransfer.files;
             updateSelectedFiles();
         };
@@ -200,20 +431,35 @@
 
         function updateSelectedFiles() {
             selectedFilesDiv.innerHTML = "";
+            if (!fileInput.files || fileInput.files.length === 0) return;
+
             for (let f of fileInput.files) {
-                selectedFilesDiv.innerHTML += `<div class="truncate">📄 ${f.name} <span class="text-gray-500">(${(f.size/1024).toFixed(1)} KB)</span></div>`;
+                const sizeKb = (f.size / 1024).toFixed(1);
+                selectedFilesDiv.innerHTML += `
+                    <div class="flex items-center justify-between bg-zinc-950/70 border border-zinc-800/80 rounded px-2.5 py-1.5">
+                        <span class="truncate font-mono text-[11px] text-zinc-300 max-w-[190px]">${escapeHtml(f.name)}</span>
+                        <span class="text-[10px] text-zinc-500 font-mono">${sizeKb} KB</span>
+                    </div>`;
             }
         }
 
-        // Upload handler
+        // Upload and Ingest Handler
         uploadBtn.onclick = async () => {
             if (!fileInput.files.length) {
-                alert("Please select at least one document first.");
+                alert("Please select at least one document to index.");
                 return;
             }
+
             uploadBtn.disabled = true;
             uploadStatus.classList.remove("hidden");
-            uploadStatus.innerHTML = `<span class="text-indigo-400 animate-pulse">Indexing documents into vector store...</span>`;
+            uploadStatus.innerHTML = `
+                <div class="flex items-center justify-center gap-2 text-zinc-400">
+                    <svg class="animate-spin h-3.5 w-3.5 text-zinc-300" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Extracting and indexing text chunks...</span>
+                </div>`;
 
             const formData = new FormData();
             for (let f of fileInput.files) {
@@ -224,35 +470,84 @@
             try {
                 const res = await fetch("/api/v1/ingest", { method: "POST", body: formData });
                 const data = await res.json();
+
                 if (res.ok) {
-                    uploadStatus.innerHTML = `<span class="text-emerald-400">✅ Indexed ${data.files.length} document(s) (${data.chunks_count} chunks)!</span>`;
+                    uploadStatus.innerHTML = `<span class="text-emerald-400 font-medium">Successfully indexed ${data.files.length} file(s) (${data.chunks_count} chunks)</span>`;
+                    docCounter.innerText = `${data.files.length} indexed`;
+                    chunksBadge.innerText = `${data.chunks_count} chunks`;
+                    
+                    // Render Indexed Files List
+                    indexedFilesList.innerHTML = "";
+                    data.files.forEach(filename => {
+                        indexedFilesList.innerHTML += `
+                            <div class="flex items-center justify-between p-2 rounded-lg bg-zinc-950/60 border border-zinc-800/60">
+                                <div class="flex items-center gap-2 truncate">
+                                    <svg class="w-3.5 h-3.5 text-zinc-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    <span class="truncate font-mono text-[11px] text-zinc-300">${escapeHtml(filename)}</span>
+                                </div>
+                                <span class="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-900/60 px-1.5 py-0.5 rounded font-medium">Ready</span>
+                            </div>`;
+                    });
                 } else {
-                    uploadStatus.innerHTML = `<span class="text-red-400">❌ ${data.detail || "Upload error"}</span>`;
+                    uploadStatus.innerHTML = `<span class="text-rose-400 font-medium">${escapeHtml(data.detail || "Indexing failed")}</span>`;
                 }
             } catch (err) {
-                uploadStatus.innerHTML = `<span class="text-red-400">❌ Connection failed: ${err.message}</span>`;
+                uploadStatus.innerHTML = `<span class="text-rose-400 font-medium">Network error: ${escapeHtml(err.message)}</span>`;
             } finally {
                 uploadBtn.disabled = false;
             }
         };
 
-        // Clear chat
+        // Clear Workspace History
         clearBtn.onclick = () => {
             chatHistory = [];
-            chatMessages.innerHTML = `
-                <div class="flex gap-3 max-w-3xl">
-                    <div class="w-8 h-8 rounded-full bg-indigo-600/30 text-indigo-400 flex items-center justify-center shrink-0 text-xs font-bold border border-indigo-500/20">AI</div>
-                    <div class="bg-gray-800/70 border border-gray-700/50 rounded-2xl p-4 text-xs text-gray-200">Chat history cleared.</div>
-                </div>`;
+            renderEmptyWelcome();
         };
 
-        // Chat Form Handler
+        function renderEmptyWelcome() {
+            chatMessages.innerHTML = `
+                <div id="initial-welcome" class="max-w-2xl mx-auto py-12 text-center">
+                    <div class="w-12 h-12 mx-auto rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mb-4">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-sm font-semibold text-zinc-200 tracking-tight">Ready for Document Analysis</h3>
+                    <p class="text-xs text-zinc-500 mt-1.5 max-w-md mx-auto leading-relaxed">
+                        Upload your PDF, Word, or text files on the left panel to index them. Then enter any question below to extract answers directly from the source text.
+                    </p>
+                    <div class="mt-6 flex flex-wrap justify-center gap-2">
+                        <button onclick="usePrompt('Give an executive summary of the indexed documents.')" class="text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition">
+                            &ldquo;Give an executive summary&rdquo;
+                        </button>
+                        <button onclick="usePrompt('What are the primary conclusions and key takeaways?')" class="text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition">
+                            &ldquo;Primary conclusions & takeaways&rdquo;
+                        </button>
+                        <button onclick="usePrompt('List all critical dates, milestones, or statistics.')" class="text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full transition">
+                            &ldquo;Key dates, milestones, & statistics&rdquo;
+                        </button>
+                    </div>
+                </div>`;
+        }
+
+        // Chip Prompt Shortcut
+        window.usePrompt = function(promptText) {
+            queryInput.value = promptText;
+            queryInput.focus();
+        };
+
+        // Form Submission
         chatForm.onsubmit = async (e) => {
             e.preventDefault();
             const query = queryInput.value.trim();
             if (!query) return;
 
-            // Render Human Message
+            // Remove welcome view if present
+            const welcome = document.getElementById("initial-welcome");
+            if (welcome) welcome.remove();
+
             appendHumanMessage(query);
             queryInput.value = "";
             setGenerating(true);
@@ -277,51 +572,95 @@
         }
 
         function appendHumanMessage(text) {
-            chatMessages.innerHTML += `
-                <div class="flex justify-end">
-                    <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs max-w-2xl leading-relaxed shadow-sm">
-                        ${escapeHtml(text)}
-                    </div>
+            const div = document.createElement("div");
+            div.className = "flex justify-end";
+            div.innerHTML = `
+                <div class="max-w-2xl bg-zinc-800 border border-zinc-700/80 text-zinc-100 rounded-xl px-4 py-3 text-xs leading-relaxed shadow-sm">
+                    <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-400 mb-1">Inquiry</div>
+                    <div>${escapeHtml(text)}</div>
                 </div>`;
+            chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
+        function createResponseElement() {
+            const div = document.createElement("div");
+            div.className = "flex justify-start max-w-3xl";
+            div.innerHTML = `
+                <div class="w-full bg-zinc-950/70 border border-zinc-800/90 rounded-xl p-4 sm:p-5 text-xs text-zinc-200 leading-relaxed shadow-sm">
+                    <div class="flex items-center justify-between pb-2.5 mb-3 border-b border-zinc-800/60">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-zinc-500"></span>
+                            <span class="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Document Synthesis</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="meta-badge text-[10px]"></div>
+                            <button onclick="copyResponse(this)" title="Copy text" class="text-zinc-500 hover:text-zinc-300 p-1 rounded hover:bg-zinc-800 transition">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="reading-prose chat-content text-zinc-300">
+                        <span class="inline-flex items-center gap-2 text-zinc-500 text-xs py-1">
+                            <svg class="animate-spin h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                            <span>Synthesizing response from documents...</span>
+                        </span>
+                    </div>
+                </div>`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return div;
+        }
+
+        window.copyResponse = function(btn) {
+            const container = btn.closest(".bg-zinc-950\\/70");
+            const content = container.querySelector(".chat-content").innerText;
+            navigator.clipboard.writeText(content).then(() => {
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = `<span class="text-emerald-400 text-[10px]">Copied</span>`;
+                setTimeout(() => btn.innerHTML = originalHtml, 2000);
+            });
+        };
+
         async function executeSyncChat(query) {
-            const aiMsgDiv = createAiMessageElement();
-            const contentDiv = aiMsgDiv.querySelector(".chat-content");
-            const badgeSpan = aiMsgDiv.querySelector(".meta-badge");
+            const respDiv = createResponseElement();
+            const contentDiv = respDiv.querySelector(".chat-content");
+            const badgeSpan = respDiv.querySelector(".meta-badge");
 
             try {
-                const t0 = performance.now();
                 const res = await fetch("/api/v1/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ session_id: sessionId, query: query, chat_history: chatHistory })
                 });
                 const data = await res.json();
-                const t1 = performance.now();
 
                 if (res.ok) {
                     contentDiv.innerHTML = marked.parse(data.answer);
                     badgeSpan.innerHTML = data.cache_hit 
-                        ? `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">⚡ Semantic Cache Hit (${data.latency_ms}ms)</span>`
-                        : `<span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">⏱️ ${data.latency_ms}ms</span>`;
+                        ? `<span class="bg-zinc-800 text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded font-mono">Cached &bull; ${data.latency_ms}ms</span>`
+                        : `<span class="bg-zinc-900 text-zinc-400 border border-zinc-800 px-2 py-0.5 rounded font-mono">${data.latency_ms}ms</span>`;
 
                     chatHistory.push({ role: "human", content: query });
                     chatHistory.push({ role: "ai", content: data.answer });
                 } else {
-                    contentDiv.innerHTML = `<span class="text-amber-400 font-medium">⚠️ ${data.detail || "Unable to generate answer."}</span>`;
+                    contentDiv.innerHTML = `<div class="p-3 bg-zinc-900 border border-amber-900/60 rounded text-amber-300 text-xs">${escapeHtml(data.detail || "Unable to retrieve relevant document passages.")}</div>`;
                 }
             } catch (err) {
-                contentDiv.innerHTML = `<span class="text-red-400">❌ Network Error: ${err.message}</span>`;
+                contentDiv.innerHTML = `<div class="p-3 bg-zinc-900 border border-rose-900/60 rounded text-rose-400 text-xs">Network error: ${escapeHtml(err.message)}</div>`;
             }
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
         async function executeStreamingChat(query) {
-            const aiMsgDiv = createAiMessageElement();
-            const contentDiv = aiMsgDiv.querySelector(".chat-content");
-            const badgeSpan = aiMsgDiv.querySelector(".meta-badge");
+            const respDiv = createResponseElement();
+            const contentDiv = respDiv.querySelector(".chat-content");
+            const badgeSpan = respDiv.querySelector(".meta-badge");
 
             let fullText = "";
             let isCached = false;
@@ -337,7 +676,7 @@
 
                 if (!res.ok) {
                     const err = await res.json();
-                    contentDiv.innerHTML = `<span class="text-amber-400 font-medium">⚠️ ${err.detail || "Error generating response"}</span>`;
+                    contentDiv.innerHTML = `<div class="p-3 bg-zinc-900 border border-amber-900/60 rounded text-amber-300 text-xs">${escapeHtml(err.detail || "Error generating document answer.")}</div>`;
                     return;
                 }
 
@@ -368,7 +707,7 @@
                                     isCached = true;
                                 }
                                 if (parsed.error) {
-                                    contentDiv.innerHTML = `<span class="text-amber-400 font-medium">⚠️ ${parsed.error}</span>`;
+                                    contentDiv.innerHTML = `<div class="p-3 bg-zinc-900 border border-amber-900/60 rounded text-amber-300 text-xs">${escapeHtml(parsed.error)}</div>`;
                                 }
                             } catch (_) {}
                         }
@@ -379,34 +718,20 @@
                 const elapsed = Math.round(t1 - t0);
 
                 if (!fullText.trim()) {
-                    contentDiv.innerHTML = `<span class="text-gray-400">No response generated. Please ensure your documents are indexed.</span>`;
+                    contentDiv.innerHTML = `<div class="p-3 bg-zinc-900 border border-zinc-800 rounded text-zinc-400 text-xs">No matching passages found. Please ensure documents have been indexed.</div>`;
                 } else {
                     badgeSpan.innerHTML = isCached
-                        ? `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">⚡ Semantic Cache Hit (${elapsed}ms)</span>`
-                        : `<span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">⏱️ Streamed (${elapsed}ms)</span>`;
+                        ? `<span class="bg-zinc-800 text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded font-mono">Cached &bull; ${elapsed}ms</span>`
+                        : `<span class="bg-zinc-900 text-zinc-400 border border-zinc-800 px-2 py-0.5 rounded font-mono">Streamed &bull; ${elapsed}ms</span>`;
 
                     chatHistory.push({ role: "human", content: query });
                     chatHistory.push({ role: "ai", content: fullText });
                 }
 
             } catch (err) {
-                contentDiv.innerHTML = `<span class="text-red-400">❌ Streaming Error: ${err.message}</span>`;
+                contentDiv.innerHTML = `<div class="p-3 bg-zinc-900 border border-rose-900/60 rounded text-rose-400 text-xs">Stream interrupted: ${escapeHtml(err.message)}</div>`;
             }
             chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        function createAiMessageElement() {
-            const div = document.createElement("div");
-            div.className = "flex gap-3 max-w-3xl";
-            div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-indigo-600/30 text-indigo-400 flex items-center justify-center shrink-0 text-xs font-bold border border-indigo-500/20">AI</div>
-                <div class="bg-gray-800/70 border border-gray-700/50 rounded-2xl p-4 text-xs text-gray-200 leading-relaxed shadow-sm w-full">
-                    <div class="chat-bubble-ai chat-content"><span class="animate-pulse text-gray-400">Thinking...</span></div>
-                    <div class="meta-badge mt-2 text-[10px]"></div>
-                </div>`;
-            chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            return div;
         }
 
         function escapeHtml(text) {
