@@ -13,3 +13,4 @@ langsmith>=0.16.2
 docx2txt>=0.9
 structlog>=24.4.0\npypdf>=5.1.0
 fastapi>=0.115.0
+uvicorn>=0.30.0\npython-multipart>=0.0.9\njinja2>=3.1.4

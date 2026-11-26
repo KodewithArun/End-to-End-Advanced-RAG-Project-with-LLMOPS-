@@ -1,19 +1,365 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Say Hello</title>
+    <title>Enterprise Conversational RAG Portal</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .chat-bubble-ai ul { list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .chat-bubble-ai ol { list-style-type: decimal; margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .chat-bubble-ai p { margin-bottom: 0.5rem; }
+        .chat-bubble-ai strong { font-weight: 600; color: #f3f4f6; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+    </style>
 </head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
 
-<body>
-    <h1>Say Hello</h1>
-    <form action="/hello" method="post">
-        <input type="text" name="name" placeholder="Enter your name">
-        <button type="submit">Say Hello</button>
-    </form>
+    <!-- Top Navigation -->
+    <header class="border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20">
+                    ⚡
+                </div>
+                <div>
+                    <h1 class="text-base font-bold text-white tracking-tight">Conversational RAG Portal</h1>
+                    <p class="text-xs text-gray-400">FastEmbed (Local) • Groq LLM • Semantic Caching</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <span id="health-badge" class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Systems Active
+                </span>
+                <span class="text-xs text-gray-500">Session: <code id="session-display" class="bg-gray-800 px-2 py-0.5 rounded text-indigo-400 font-mono">default</code></span>
+            </div>
+        </div>
+    </header>
 
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+
+        <!-- Left Sidebar: Document Ingestion & Metrics -->
+        <aside class="md:col-span-1 space-y-5">
+            <!-- Upload Card -->
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-sm">
+                <h2 class="text-sm font-semibold text-gray-200 mb-2 flex items-center gap-2">
+                    📁 Ingest Knowledge
+                </h2>
+                <p class="text-xs text-gray-400 mb-4">Upload PDFs, DOCX, or TXT files to index into in-memory vector storage.</p>
+
+                <div id="drop-zone" class="border-2 border-dashed border-gray-700 hover:border-indigo-500 transition-colors rounded-lg p-5 text-center cursor-pointer bg-gray-950/40">
+                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt" class="hidden">
+                    <svg class="mx-auto h-8 w-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                    <span class="text-xs text-gray-300 font-medium block">Click or Drag & Drop</span>
+                    <span class="text-[11px] text-gray-500 mt-1 block">PDF, Word DOCX, TXT</span>
+                </div>
+
+                <div id="selected-files" class="mt-3 space-y-1 text-xs text-gray-400 max-h-24 overflow-y-auto"></div>
+
+                <button id="upload-btn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-lg text-xs transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                    <span>Index Documents</span>
+                </button>
+                <div id="upload-status" class="mt-2 text-xs text-center hidden"></div>
+            </div>
+
+            <!-- Pipeline Status Card -->
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-sm space-y-3">
+                <h2 class="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                    ⚙️ Architecture Info
+                </h2>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between py-1 border-b border-gray-800">
+                        <span class="text-gray-400">Embedding</span>
+                        <span class="text-gray-200 font-mono">FastEmbed BGE</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-gray-800">
+                        <span class="text-gray-400">LLM Provider</span>
+                        <span class="text-indigo-400 font-medium">Groq (OSS 20B)</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-gray-800">
+                        <span class="text-gray-400">Vector Store</span>
+                        <span class="text-emerald-400 font-medium">InMemoryVectorStore</span>
+                    </div>
+                    <div class="flex justify-between py-1">
+                        <span class="text-gray-400">Semantic Cache</span>
+                        <span class="text-amber-400 font-medium">Cosine (0.88 Threshold)</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Main Panel: Conversational Chat Interface -->
+        <section class="md:col-span-3 flex flex-col bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-sm h-[750px]">
+            
+            <!-- Chat Header -->
+            <div class="border-b border-gray-800 px-5 py-3.5 bg-gray-900/50 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                    <span class="text-xs font-semibold text-gray-200">Interactive Chat Stream</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 select-none">
+                        <input type="checkbox" id="stream-toggle" checked class="rounded border-gray-700 bg-gray-800 text-indigo-600 focus:ring-0">
+                        <span>Live Stream Tokens</span>
+                    </label>
+                    <button id="clear-btn" class="text-xs text-gray-400 hover:text-red-400 transition">Clear</button>
+                </div>
+            </div>
+
+            <!-- Chat Messages Log -->
+            <div id="chat-messages" class="flex-1 p-5 overflow-y-auto space-y-4 custom-scrollbar">
+                <!-- Welcome Message -->
+                <div class="flex gap-3 max-w-3xl">
+                    <div class="w-8 h-8 rounded-full bg-indigo-600/30 text-indigo-400 flex items-center justify-center shrink-0 text-xs font-bold border border-indigo-500/20">
+                        AI
+                    </div>
+                    <div class="bg-gray-800/70 border border-gray-700/50 rounded-2xl p-4 text-xs text-gray-200 leading-relaxed shadow-sm">
+                        👋 Welcome to the Multi-Document Conversational RAG portal! 
+                        <br><br>
+                        Upload your documents on the left panel, then ask any question. Answers are retrieved via in-memory semantic search and accelerated with real-time semantic caching.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input Area -->
+            <div class="border-t border-gray-800 p-4 bg-gray-900/60">
+                <form id="chat-form" class="flex gap-3">
+                    <input type="text" id="query-input" placeholder="Ask a question about your ingested documents..." autocomplete="off"
+                        class="flex-1 bg-gray-950 border border-gray-700 focus:border-indigo-500 focus:outline-none rounded-xl px-4 py-3 text-xs text-gray-100 placeholder-gray-500 transition">
+                    <button type="submit" id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 rounded-xl text-xs transition flex items-center gap-2 shrink-0">
+                        <span>Send</span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Client Script -->
+    <script>
+        const sessionId = "session_" + Math.random().toString(36).substring(2, 10);
+        document.getElementById("session-display").innerText = sessionId;
+
+        let chatHistory = [];
+        const dropZone = document.getElementById("drop-zone");
+        const fileInput = document.getElementById("file-input");
+        const selectedFilesDiv = document.getElementById("selected-files");
+        const uploadBtn = document.getElementById("upload-btn");
+        const uploadStatus = document.getElementById("upload-status");
+        const chatMessages = document.getElementById("chat-messages");
+        const chatForm = document.getElementById("chat-form");
+        const queryInput = document.getElementById("query-input");
+        const streamToggle = document.getElementById("stream-toggle");
+        const clearBtn = document.getElementById("clear-btn");
+
+        // Drag & Drop
+        dropZone.onclick = () => fileInput.click();
+        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add("border-indigo-500"); };
+        dropZone.ondragleave = () => dropZone.classList.remove("border-indigo-500");
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove("border-indigo-500");
+            fileInput.files = e.dataTransfer.files;
+            updateSelectedFiles();
+        };
+        fileInput.onchange = updateSelectedFiles;
+
+        function updateSelectedFiles() {
+            selectedFilesDiv.innerHTML = "";
+            for (let f of fileInput.files) {
+                selectedFilesDiv.innerHTML += `<div class="truncate">📄 ${f.name} <span class="text-gray-500">(${(f.size/1024).toFixed(1)} KB)</span></div>`;
+            }
+        }
+
+        // Upload handler
+        uploadBtn.onclick = async () => {
+            if (!fileInput.files.length) {
+                alert("Please select at least one document first.");
+                return;
+            }
+            uploadBtn.disabled = true;
+            uploadStatus.classList.remove("hidden");
+            uploadStatus.innerHTML = `<span class="text-indigo-400 animate-pulse">Indexing documents...</span>`;
+
+            const formData = new FormData();
+            for (let f of fileInput.files) {
+                formData.append("files", f);
+            }
+            formData.append("session_id", sessionId);
+
+            try {
+                const res = await fetch("/api/v1/ingest", { method: "POST", body: formData });
+                const data = await res.json();
+                if (res.ok) {
+                    uploadStatus.innerHTML = `<span class="text-emerald-400">✅ Indexed ${data.files.length} document(s) (${data.chunks_count} chunks)!</span>`;
+                } else {
+                    uploadStatus.innerHTML = `<span class="text-red-400">❌ ${data.detail || "Upload error"}</span>`;
+                }
+            } catch (err) {
+                uploadStatus.innerHTML = `<span class="text-red-400">❌ Connection failed: ${err.message}</span>`;
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        };
+
+        // Clear chat
+        clearBtn.onclick = () => {
+            chatHistory = [];
+            chatMessages.innerHTML = `
+                <div class="flex gap-3 max-w-3xl">
+                    <div class="w-8 h-8 rounded-full bg-indigo-600/30 text-indigo-400 flex items-center justify-center shrink-0 text-xs font-bold border border-indigo-500/20">AI</div>
+                    <div class="bg-gray-800/70 border border-gray-700/50 rounded-2xl p-4 text-xs text-gray-200">Chat history cleared.</div>
+                </div>`;
+        };
+
+        // Chat Form Handler
+        chatForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            // Render Human Message
+            appendHumanMessage(query);
+            queryInput.value = "";
+
+            if (streamToggle.checked) {
+                await executeStreamingChat(query);
+            } else {
+                await executeSyncChat(query);
+            }
+        };
+
+        function appendHumanMessage(text) {
+            chatMessages.innerHTML += `
+                <div class="flex justify-end">
+                    <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs max-w-2xl leading-relaxed shadow-sm">
+                        ${escapeHtml(text)}
+                    </div>
+                </div>`;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function executeSyncChat(query) {
+            const aiMsgDiv = createAiMessageElement();
+            const contentDiv = aiMsgDiv.querySelector(".chat-content");
+            const badgeSpan = aiMsgDiv.querySelector(".meta-badge");
+
+            try {
+                const t0 = performance.now();
+                const res = await fetch("/api/v1/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId, query: query, chat_history: chatHistory })
+                });
+                const data = await res.json();
+                const t1 = performance.now();
+
+                if (res.ok) {
+                    contentDiv.innerHTML = marked.parse(data.answer);
+                    badgeSpan.innerHTML = data.cache_hit 
+                        ? `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">⚡ Cached (${data.latency_ms}ms)</span>`
+                        : `<span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">⏱️ ${data.latency_ms}ms</span>`;
+
+                    chatHistory.push({ role: "human", content: query });
+                    chatHistory.push({ role: "ai", content: data.answer });
+                } else {
+                    contentDiv.innerText = "Error: " + (data.detail || "Unable to generate answer.");
+                }
+            } catch (err) {
+                contentDiv.innerText = "Network Error: " + err.message;
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function executeStreamingChat(query) {
+            const aiMsgDiv = createAiMessageElement();
+            const contentDiv = aiMsgDiv.querySelector(".chat-content");
+            const badgeSpan = aiMsgDiv.querySelector(".meta-badge");
+
+            let fullText = "";
+            let isCached = false;
+            const t0 = performance.now();
+
+            try {
+                const res = await fetch("/api/v1/chat/stream", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId, query: query, chat_history: chatHistory })
+                });
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split("\n\n");
+
+                    for (let line of lines) {
+                        if (line.startsWith("data: ")) {
+                            try {
+                                const parsed = JSON.parse(line.substring(6));
+                                if (parsed.token) {
+                                    fullText += parsed.token;
+                                    contentDiv.innerHTML = marked.parse(fullText);
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
+                                if (parsed.cached) {
+                                    isCached = true;
+                                }
+                            } catch (_) {}
+                        }
+                    }
+                }
+
+                const t1 = performance.now();
+                const elapsed = Math.round(t1 - t0);
+                badgeSpan.innerHTML = isCached
+                    ? `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">⚡ Semantic Cache Hit (${elapsed}ms)</span>`
+                    : `<span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">⏱️ Streamed (${elapsed}ms)</span>`;
+
+                chatHistory.push({ role: "human", content: query });
+                chatHistory.push({ role: "ai", content: fullText });
+
+            } catch (err) {
+                contentDiv.innerText = "Streaming Error: " + err.message;
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function createAiMessageElement() {
+            const div = document.createElement("div");
+            div.className = "flex gap-3 max-w-3xl";
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-indigo-600/30 text-indigo-400 flex items-center justify-center shrink-0 text-xs font-bold border border-indigo-500/20">AI</div>
+                <div class="bg-gray-800/70 border border-gray-700/50 rounded-2xl p-4 text-xs text-gray-200 leading-relaxed shadow-sm w-full">
+                    <div class="chat-bubble-ai chat-content"><span class="animate-pulse">Thinking...</span></div>
+                    <div class="meta-badge mt-2 text-[10px]"></div>
+                </div>`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return div;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.innerText = text;
+            return div.innerHTML;
+        }
+    </script>
 </body>
-
 </html>
