@@ -187,11 +187,48 @@ class AlertManager:
             "critical_count": critical_count,
             "warning_count": warning_count,
             "type_breakdown": type_breakdown,
+            "webhook_configured": bool(self.webhook_url),
             "active_thresholds": {
                 "latency_threshold_ms": self.latency_threshold_ms,
                 "low_score_threshold": self.low_score_threshold,
             },
         }
+
+    def clear_alerts(self) -> None:
+        """Clear all buffered alerts."""
+        self.alerts.clear()
+        log.info("Alerts buffer cleared")
+
+    def trigger_test_alert(self, alert_type: str = "HIGH_LATENCY") -> AlertEvent:
+        """Manually trigger a test anomaly alert for monitoring verification."""
+        if alert_type == "LOW_USER_SATISFACTION":
+            alert = AlertEvent(
+                alert_type=AlertType.LOW_USER_SATISFACTION,
+                severity=AlertSeverity.WARNING,
+                message="[TEST ALERT] Low satisfaction score (0.35) detected on test query.",
+                metric_value=0.35,
+                threshold=self.low_score_threshold,
+                details={"test": True, "source": "Manual Trigger"},
+            )
+        elif alert_type == "PIPELINE_ERROR":
+            alert = AlertEvent(
+                alert_type=AlertType.PIPELINE_ERROR,
+                severity=AlertSeverity.CRITICAL,
+                message="[TEST ALERT] Simulated pipeline timeout exception.",
+                details={"test": True, "source": "Manual Trigger"},
+            )
+        else:
+            alert = AlertEvent(
+                alert_type=AlertType.HIGH_LATENCY,
+                severity=AlertSeverity.CRITICAL,
+                message=f"[TEST ALERT] Latency anomaly spike: 3420.5ms exceeded threshold of {self.latency_threshold_ms}ms.",
+                metric_value=3420.5,
+                threshold=self.latency_threshold_ms,
+                details={"test": True, "source": "Manual Trigger"},
+            )
+
+        self._record_alert(alert)
+        return alert
 
 
 # Global Alert Manager Singleton

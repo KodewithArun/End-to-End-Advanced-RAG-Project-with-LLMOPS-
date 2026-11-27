@@ -382,6 +382,20 @@ async def get_alerts():
     )
 
 
+@app.post("/api/v1/alerts/test")
+async def trigger_test_alert(alert_type: str = "HIGH_LATENCY"):
+    """Trigger a manual test alert for monitoring verification."""
+    alert = ALERT_MANAGER.trigger_test_alert(alert_type=alert_type)
+    return {"success": True, "alert": alert.model_dump(), "message": "Test anomaly alert generated."}
+
+
+@app.delete("/api/v1/alerts")
+async def clear_alerts():
+    """Clear all stored alerts."""
+    ALERT_MANAGER.clear_alerts()
+    return {"success": True, "message": "Alert buffer cleared."}
+
+
 @app.post("/api/v1/alerts/webhook")
 async def receive_alert_webhook(payload: dict):
     """Ingest external alert webhooks from LangSmith rules or cloud monitoring systems."""

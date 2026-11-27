@@ -161,8 +161,15 @@
 
             <!-- Workspace Status & Session Actions -->
             <div class="flex items-center space-x-3">
+                <!-- Alerts / Monitoring Trigger -->
+                <button id="alerts-btn" onclick="toggleAlertsDrawer(true)" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 hover:border-zinc-300 transition shadow-sm cursor-pointer" title="Operational Alerts & Monitoring">
+                    <span id="alerts-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="font-medium text-xs sm:text-sm">Alerts</span>
+                    <span id="alerts-count-badge" class="font-mono text-xs bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 rounded text-zinc-700 font-semibold">0</span>
+                </button>
+
                 <!-- Status Indicator -->
-                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800">
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800">
                     <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
                     <span class="font-medium text-xs sm:text-sm">Workspace Ready</span>
                 </div>
@@ -265,9 +272,12 @@
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> LangSmith Active
                         </span>
                     </div>
-                    <div class="flex justify-between text-zinc-600">
+                    <div class="flex justify-between items-center text-zinc-600">
                         <span>Anomaly Alerts</span>
-                        <span class="text-emerald-700 font-mono font-medium">Active Monitoring</span>
+                        <button onclick="toggleAlertsDrawer(true)" class="text-xs font-mono font-medium text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition flex items-center gap-1 cursor-pointer">
+                            <span>Live Feeds</span>
+                            <span class="text-[10px]">&rarr;</span>
+                        </button>
                     </div>
                 </div>
 
@@ -664,6 +674,7 @@
                     if (feedbackActions) {
                         feedbackActions.innerHTML = `<span class="text-emerald-700 text-xs font-medium font-mono">Feedback logged</span>`;
                     }
+                    fetchAlerts();
                 } else {
                     if (feedbackActions) feedbackActions.innerHTML = `<span class="text-zinc-500 text-xs font-mono">Offline</span>`;
                 }
@@ -696,6 +707,7 @@
 
                     chatHistory.push({ role: "human", content: query });
                     chatHistory.push({ role: "ai", content: data.answer });
+                    fetchAlerts();
                 } else {
                     contentDiv.innerHTML = `<div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm font-medium">${escapeHtml(data.detail || "Unable to retrieve relevant document passages.")}</div>`;
                 }
@@ -779,13 +791,12 @@
 
                     chatHistory.push({ role: "human", content: query });
                     chatHistory.push({ role: "ai", content: fullText });
+                    fetchAlerts();
                 }
 
             } catch (err) {
                 contentDiv.innerHTML = `<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-sm font-medium">Stream interrupted: ${escapeHtml(err.message)}</div>`;
             }
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
@@ -794,6 +805,266 @@
             div.innerText = text;
             return div.innerHTML;
         }
+
+        /* --- Operational Alerts & LLMOps Monitoring Drawer --- */
+        async function fetchAlerts() {
+            try {
+                const res = await fetch("/api/v1/alerts");
+                if (!res.ok) return;
+                const data = await res.json();
+                renderAlerts(data);
+            } catch (e) {
+                console.warn("Could not fetch alerts", e);
+            }
+        }
+
+        function renderAlerts(data) {
+            const stats = data.statistics || {};
+            const alerts = data.recent_alerts || [];
+
+            const total = stats.total_alerts || 0;
+            const critical = stats.critical_count || 0;
+            const warnings = stats.warning_count || 0;
+
+            // Header badge & dot
+            const countBadge = document.getElementById("alerts-count-badge");
+            const alertDot = document.getElementById("alerts-dot");
+            const drawerDot = document.getElementById("drawer-status-dot");
+            if (countBadge) countBadge.innerText = total;
+
+            const dotColorClass = critical > 0 ? "bg-rose-500" : (warnings > 0 ? "bg-amber-500" : "bg-emerald-500");
+            if (alertDot) {
+                alertDot.className = `w-2 h-2 rounded-full ${dotColorClass} ${total > 0 ? 'animate-pulse' : ''}`;
+            }
+            if (drawerDot) {
+                drawerDot.className = `w-2.5 h-2.5 rounded-full ${dotColorClass}`;
+            }
+
+            // Stat counters
+            const statTotal = document.getElementById("stat-total-alerts");
+            const statCrit = document.getElementById("stat-critical-alerts");
+            const statWarn = document.getElementById("stat-warning-alerts");
+            if (statTotal) statTotal.innerText = total;
+            if (statCrit) statCrit.innerText = critical;
+            if (statWarn) statWarn.innerText = warnings;
+
+            // Thresholds & Webhook
+            const statWebhook = document.getElementById("stat-webhook-status");
+            const statLatThresh = document.getElementById("stat-latency-threshold");
+            const statScoreThresh = document.getElementById("stat-score-threshold");
+
+            if (statWebhook) {
+                statWebhook.innerText = stats.webhook_configured ? "Webhook Dispatched" : "Local Queue / Ready";
+                statWebhook.className = stats.webhook_configured 
+                    ? "font-mono font-medium text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded"
+                    : "font-mono font-medium text-zinc-700 bg-zinc-200/80 px-2 py-0.5 rounded";
+            }
+            if (statLatThresh && stats.active_thresholds) {
+                statLatThresh.innerText = `> ${stats.active_thresholds.latency_threshold_ms}ms`;
+            }
+            if (statScoreThresh && stats.active_thresholds) {
+                statScoreThresh.innerText = `< ${stats.active_thresholds.low_score_threshold.toFixed(2)} score`;
+            }
+
+            // Alert feed list
+            const container = document.getElementById("alerts-list");
+            if (!container) return;
+
+            if (alerts.length === 0) {
+                container.innerHTML = `
+                    <div id="no-alerts-hint" class="py-12 text-center text-zinc-400">
+                        <svg class="w-8 h-8 mx-auto text-zinc-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="text-sm font-semibold text-zinc-700">No active anomalies detected</p>
+                        <p class="text-xs text-zinc-400 mt-1">Operational latency and user feedback are nominal.</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = alerts.map(alert => {
+                const isCrit = alert.severity === "CRITICAL";
+                const isWarn = alert.severity === "WARNING";
+                const badgeColor = isCrit 
+                    ? "bg-rose-100 text-rose-800 border-rose-200" 
+                    : (isWarn ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-zinc-100 text-zinc-700 border-zinc-200");
+                const cardBorder = isCrit ? "border-rose-200 bg-white" : "border-zinc-200 bg-white";
+                
+                const timeStr = alert.timestamp ? new Date(alert.timestamp * 1000).toLocaleTimeString() : "";
+                
+                const metaHtml = Object.entries(alert.metadata || {})
+                    .map(([k, v]) => `<span class="bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded font-mono text-[11px]">${escapeHtml(k)}: ${escapeHtml(String(v))}</span>`)
+                    .join(" ");
+
+                return `
+                    <div class="border ${cardBorder} rounded-xl p-4 shadow-sm hover:border-zinc-300 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded text-[11px] font-bold tracking-wide border uppercase ${badgeColor}">
+                                    ${escapeHtml(alert.severity)}
+                                </span>
+                                <span class="font-mono text-xs font-semibold text-zinc-800">${escapeHtml(alert.alert_type)}</span>
+                            </div>
+                            <span class="text-[11px] font-mono text-zinc-400">${timeStr}</span>
+                        </div>
+                        <p class="text-xs text-zinc-700 leading-relaxed font-medium mb-2.5">${escapeHtml(alert.message)}</p>
+                        ${metaHtml ? `<div class="flex flex-wrap gap-1.5 pt-2 border-t border-zinc-100">${metaHtml}</div>` : ''}
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function toggleAlertsDrawer(open) {
+            const container = document.getElementById("alerts-drawer-container");
+            const backdrop = document.getElementById("alerts-backdrop");
+            const panel = document.getElementById("alerts-panel");
+            if (!container || !backdrop || !panel) return;
+
+            if (open) {
+                container.classList.remove("hidden");
+                // Trigger transitions on next frame
+                requestAnimationFrame(() => {
+                    backdrop.classList.remove("opacity-0");
+                    backdrop.classList.add("opacity-100");
+                    panel.classList.remove("translate-x-full");
+                    panel.classList.add("translate-x-0");
+                });
+                fetchAlerts();
+            } else {
+                backdrop.classList.remove("opacity-100");
+                backdrop.classList.add("opacity-0");
+                panel.classList.remove("translate-x-0");
+                panel.classList.add("translate-x-full");
+                setTimeout(() => {
+                    container.classList.add("hidden");
+                }, 300);
+            }
+        }
+
+        async function triggerTestAlert(type) {
+            try {
+                const res = await fetch(`/api/v1/alerts/test?alert_type=${encodeURIComponent(type)}`, {
+                    method: "POST"
+                });
+                if (res.ok) {
+                    await fetchAlerts();
+                }
+            } catch (err) {
+                console.error("Failed to trigger test alert", err);
+            }
+        }
+
+        async function clearAlerts() {
+            try {
+                const res = await fetch("/api/v1/alerts", { method: "DELETE" });
+                if (res.ok) {
+                    await fetchAlerts();
+                }
+            } catch (err) {
+                console.error("Failed to clear alerts", err);
+            }
+        }
+
+        // Initialize alerts state on page load
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchAlerts();
+            // Periodically refresh alerts every 15 seconds
+            setInterval(fetchAlerts, 15000);
+        });
+        fetchAlerts();
     </script>
+
+    <!-- Alerts & Observability Slide-Over Drawer Component -->
+    <div id="alerts-drawer-container" class="fixed inset-0 z-50 overflow-hidden pointer-events-none hidden transition-opacity duration-300">
+        <!-- Backdrop -->
+        <div id="alerts-backdrop" onclick="toggleAlertsDrawer(false)" class="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm pointer-events-auto opacity-0 transition-opacity duration-300"></div>
+
+        <div class="fixed inset-y-0 right-0 max-w-full flex pl-10 pointer-events-auto">
+            <div id="alerts-panel" class="w-screen max-w-md bg-white border-l border-zinc-200 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out">
+                
+                <!-- Drawer Header -->
+                <div class="p-5 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500" id="drawer-status-dot"></span>
+                            <h3 class="text-base font-bold text-zinc-900">Operational Alerts & Monitoring</h3>
+                        </div>
+                        <p class="text-xs text-zinc-500 mt-0.5">LangSmith Observability &bull; Webhook Dispatcher</p>
+                    </div>
+                    <button onclick="toggleAlertsDrawer(false)" class="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-200/60 transition cursor-pointer" title="Close Panel">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Stats Overview Cards -->
+                <div class="p-5 border-b border-zinc-200 bg-white grid grid-cols-3 gap-3">
+                    <div class="p-3 rounded-xl bg-zinc-50 border border-zinc-200">
+                        <span class="text-[11px] font-medium text-zinc-500 block uppercase tracking-wider">Total</span>
+                        <span id="stat-total-alerts" class="text-xl font-bold font-mono text-zinc-900 mt-1 block">0</span>
+                    </div>
+                    <div class="p-3 rounded-xl bg-rose-50/60 border border-rose-200">
+                        <span class="text-[11px] font-medium text-rose-700 block uppercase tracking-wider">Critical</span>
+                        <span id="stat-critical-alerts" class="text-xl font-bold font-mono text-rose-900 mt-1 block">0</span>
+                    </div>
+                    <div class="p-3 rounded-xl bg-amber-50/60 border border-amber-200">
+                        <span class="text-[11px] font-medium text-amber-700 block uppercase tracking-wider">Warning</span>
+                        <span id="stat-warning-alerts" class="text-xl font-bold font-mono text-amber-900 mt-1 block">0</span>
+                    </div>
+                </div>
+
+                <!-- Webhook & Operational Thresholds Status -->
+                <div class="px-5 py-4 bg-zinc-50/70 border-b border-zinc-200 text-xs space-y-2">
+                    <div class="flex items-center justify-between text-zinc-600">
+                        <span class="font-medium">Webhook Dispatcher:</span>
+                        <span id="stat-webhook-status" class="font-mono font-medium text-zinc-800 bg-zinc-200/80 px-2 py-0.5 rounded">Local Queue / Ready</span>
+                    </div>
+                    <div class="flex items-center justify-between text-zinc-600">
+                        <span class="font-medium">Latency Anomaly Threshold:</span>
+                        <span id="stat-latency-threshold" class="font-mono text-zinc-800">&gt; 2500ms</span>
+                    </div>
+                    <div class="flex items-center justify-between text-zinc-600">
+                        <span class="font-medium">Feedback Score Threshold:</span>
+                        <span id="stat-score-threshold" class="font-mono text-zinc-800">&lt; 0.60 score</span>
+                    </div>
+                </div>
+
+                <!-- Actions Bar -->
+                <div class="px-5 py-3 border-b border-zinc-200 bg-white flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="triggerTestAlert('HIGH_LATENCY')" class="text-xs bg-zinc-900 hover:bg-black text-white font-medium px-2.5 py-1.5 rounded-lg transition shadow-sm cursor-pointer">
+                            + Test Latency
+                        </button>
+                        <button onclick="triggerTestAlert('LOW_FEEDBACK_SCORE')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-medium px-2.5 py-1.5 rounded-lg border border-zinc-200 transition cursor-pointer">
+                            + Test Feedback
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="fetchAlerts()" title="Refresh alerts list" class="text-xs text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 p-1.5 rounded-lg transition border border-zinc-200 cursor-pointer">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        </button>
+                        <button onclick="clearAlerts()" title="Clear alert buffer" class="text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1.5 rounded-lg transition border border-rose-200 font-medium cursor-pointer">
+                            Clear Buffer
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Alerts List Container -->
+                <div id="alerts-list" class="flex-1 overflow-y-auto p-5 space-y-3 workspace-scroll bg-zinc-50/40">
+                    <div id="no-alerts-hint" class="py-12 text-center text-zinc-400">
+                        <svg class="w-8 h-8 mx-auto text-zinc-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="text-sm font-semibold text-zinc-700">No active anomalies detected</p>
+                        <p class="text-xs text-zinc-400 mt-1">Operational latency and user feedback are nominal.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
 </body>
 </html>
