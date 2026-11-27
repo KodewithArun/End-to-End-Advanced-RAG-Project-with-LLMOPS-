@@ -1,16 +1,14 @@
-import sys
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from qdrant_client import QdrantClient, models
 from langchain_qdrant import QdrantVectorStore
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.vectorstores import VectorStore, InMemoryVectorStore
+from langchain_core.vectorstores import InMemoryVectorStore
 
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.utils.config_loader import load_config
 from multi_doc_chat.utils.model_loader import ModelLoader
-from multi_doc_chat.exception.custom_exception import DocumentPortalException
 
 
 class SessionVectorStoreProxy:
@@ -261,7 +259,7 @@ class VectorStoreManager:
                 log.info("Deleted session vectors from Qdrant", session_id=session_id)
             except Exception as e:
                 log.error("Failed to delete session vectors from Qdrant", error=str(e), session_id=session_id)
-        
+
         if session_id in self.in_memory_stores:
             del self.in_memory_stores[session_id]
             deleted = True
@@ -287,7 +285,7 @@ class VectorStoreManager:
                             sessions.add(sid)
             except Exception as e:
                 log.warning("Failed to scroll sessions in Qdrant", error=str(e))
-        
+
         sessions.update(self.in_memory_stores.keys())
         return sorted(list(sessions))
 

@@ -214,7 +214,7 @@ class AlertManager:
         total = len(alerts)
         critical_count = sum(1 for a in alerts if a.get("severity") == AlertSeverity.CRITICAL.value or a.get("severity") == AlertSeverity.CRITICAL)
         warning_count = sum(1 for a in alerts if a.get("severity") == AlertSeverity.WARNING.value or a.get("severity") == AlertSeverity.WARNING)
-        
+
         type_breakdown: Dict[str, int] = {}
         for a in alerts:
             val = a.get("alert_type")

@@ -1,13 +1,10 @@
 import pytest
 import numpy as np
-from langchain_core.messages import HumanMessage, AIMessage
 
 from multi_doc_chat.src.document_chat.retrieval import ConversationalRAG
 from multi_doc_chat.utils.semantic_cache import SemanticCache
 from multi_doc_chat.src.document_ingestion.data_ingestion import (
     ChatIngestor,
-    SESSION_VECTOR_STORES,
-    get_session_vector_store,
 )
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 

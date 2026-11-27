@@ -1,6 +1,5 @@
 import io
 import json
-import pytest
 
 
 def test_health_check_endpoint(client):
@@ -37,7 +36,7 @@ def test_chat_unindexed_session_returns_404(client):
 def test_chat_success_and_semantic_cache_hit(client):
     """Ingest document, query via POST /api/v1/chat, and verify semantic cache acceleration on follow-up."""
     session_id = "test_chat_route_session_01"
-    
+
     # 1. Ingest document
     content = (
         b"Agentic AI systems are composed of four architectural pillars: "
@@ -82,7 +81,7 @@ def test_chat_success_and_semantic_cache_hit(client):
 def test_chat_stream_sse_tokens(client):
     """Test real-time token streaming via POST /api/v1/chat/stream."""
     session_id = "test_chat_stream_session"
-    
+
     # Ingest document
     content = b"ReAct interleaves reasoning and acting to solve multi-step problems systematically."
     files = [("files", ("react_concept.txt", io.BytesIO(content), "text/plain"))]

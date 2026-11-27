@@ -1,7 +1,4 @@
-import os
-import sys
 import time
-import json
 import httpx
 import redis
 from pathlib import Path
@@ -109,7 +106,7 @@ def main():
         assert c2["cache_hit"] is True, "Expected semantic cache hit on query 2"
 
     # 8. Test Streaming Response
-    print(f"\n[Step 8] Testing Live SSE Token Stream...")
+    print("\n[Step 8] Testing Live SSE Token Stream...")
     with httpx.Client(timeout=15.0) as client:
         with client.stream(
             "POST",
@@ -124,7 +121,7 @@ def main():
             print(f"  ✅ Received {token_count} SSE frames streamed in real time.")
 
     # 9. Verify Redis Shared Operational Alerts
-    print(f"\n[Step 9] Testing Shared Alert Manager in Redis 8 Container...")
+    print("\n[Step 9] Testing Shared Alert Manager in Redis 8 Container...")
     with httpx.Client(timeout=5.0) as client:
         # Trigger test anomaly alert
         t_alert_res = client.post(f"{BASE_URL}/api/v1/alerts/test?alert_type=HIGH_LATENCY")
