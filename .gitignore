@@ -46,7 +46,8 @@ env/
 
 # Runtime and logs
 logs/
-data/session_*/
+data/*
+!data/agentic_ai.txt
 faiss_index/
 
 # IDE / Editors

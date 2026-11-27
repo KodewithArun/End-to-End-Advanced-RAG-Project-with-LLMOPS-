@@ -19,6 +19,24 @@ def save_uploaded_files(uploaded_files: Iterable, target_dir: Path) -> List[Path
         target_dir.mkdir(parents=True, exist_ok=True)
         saved: List[Path] = []
         for uf in uploaded_files:
+            # Handle Path or str directly
+            if isinstance(uf, (str, Path)):
+                src_path = Path(uf)
+                if src_path.is_file():
+                    ext = src_path.suffix.lower()
+                    if ext not in SUPPORTED_EXTENSIONS:
+                        log.warning("Unsupported file skipped", filename=src_path.name)
+                        continue
+                    fname = f"{uuid.uuid4().hex[:8]}{ext}"
+                    out = target_dir / fname
+                    with open(src_path, "rb") as src, open(out, "wb") as dst:
+                        dst.write(src.read())
+                    saved.append(out)
+                    log.info("File saved for ingestion", uploaded=src_path.name, saved_as=str(out))
+                    continue
+                else:
+                    raise FileNotFoundError(f"File not found: {src_path}")
+
             # Handle Starlette UploadFile (has .filename and .file) and generic objects (have .name)
             name = getattr(uf, "filename", getattr(uf, "name", "file"))
             ext = Path(name).suffix.lower()
