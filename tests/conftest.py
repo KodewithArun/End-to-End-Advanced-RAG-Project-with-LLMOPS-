@@ -37,10 +37,17 @@ from multi_doc_chat.src.document_chat.retrieval import (
 def _clear_redis():
     try:
         import redis
-        r = redis.from_url("redis://127.0.0.1:6379/0", socket_timeout=0.5)
-        keys = r.keys("rag:*")
-        if keys:
-            r.delete(*keys)
+        from multi_doc_chat.utils.config_loader import load_config
+        cfg_url = load_config().get("distributed_cache", {}).get("redis_url")
+        urls = [url for url in [os.getenv("REDIS_URL"), cfg_url, "redis://127.0.0.1:6380/0", "redis://127.0.0.1:6379/0"] if url]
+        for url in set(urls):
+            try:
+                r = redis.from_url(url, socket_timeout=0.5)
+                keys = r.keys("rag:*")
+                if keys:
+                    r.delete(*keys)
+            except Exception:
+                pass
     except Exception:
         pass
 
