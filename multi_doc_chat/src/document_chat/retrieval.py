@@ -10,6 +10,7 @@ from langchain_core.vectorstores import InMemoryVectorStore
 
 from multi_doc_chat.utils.model_loader import ModelLoader
 from multi_doc_chat.utils.semantic_cache import SemanticCache
+from multi_doc_chat.observability import build_run_config, record_cache_hit_trace
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.prompts.prompt_library import PROMPT_REGISTRY
@@ -136,11 +137,26 @@ class ConversationalRAG:
                 if cache_hit:
                     cached_answer, score, matched_q = cache_hit
                     log.info("Returning cached response", similarity=score, matched_query=matched_q)
+                    try:
+                        record_cache_hit_trace(
+                            query=user_input,
+                            matched_query=matched_q,
+                            similarity_score=score,
+                            answer=cached_answer,
+                            session_id=self.session_id or "default",
+                        )
+                    except Exception as te:
+                        log.debug("Cache hit trace recording skipped", error=str(te))
                     return cached_answer
 
-            # 2. Execute LCEL chain
+            # 2. Execute LCEL chain with LangSmith Run Config
             payload = {"input": user_input, "chat_history": chat_history}
-            answer = self.chain.invoke(payload)
+            run_config = build_run_config(
+                session_id=self.session_id or "default",
+                run_name="ConversationalRAG_Sync",
+                extra_tags=["sync"],
+            )
+            answer = self.chain.invoke(payload, config=run_config)
             if not answer:
                 return "no answer generated."
 
@@ -159,19 +175,24 @@ class ConversationalRAG:
             raise DocumentPortalException("Invocation error in ConversationalRAG", sys)
 
     def stream(self, user_input: str, chat_history: Optional[List[BaseMessage]] = None) -> Iterator[str]:
-        """Synchronously stream answer tokens."""
+        """Synchronously stream answer tokens with LangSmith tracing."""
         if self.chain is None:
             raise DocumentPortalException("RAG chain not initialized", sys)
         chat_history = chat_history or []
         payload = {"input": user_input, "chat_history": chat_history}
+        run_config = build_run_config(
+            session_id=self.session_id or "default",
+            run_name="ConversationalRAG_Stream",
+            extra_tags=["stream", "sync"],
+        )
 
-        for chunk in self.chain.stream(payload):
+        for chunk in self.chain.stream(payload, config=run_config):
             yield chunk
 
     # ---------- Asynchronous Execution ----------
 
     async def ainvoke(self, user_input: str, chat_history: Optional[List[BaseMessage]] = None) -> str:
-        """Asynchronously invoke the RAG pipeline with semantic caching."""
+        """Asynchronously invoke the RAG pipeline with semantic caching and LangSmith tracing."""
         try:
             if self.chain is None:
                 raise DocumentPortalException("RAG chain not initialized", sys)
@@ -180,17 +201,31 @@ class ConversationalRAG:
             # 1. Semantic Cache check
             query_emb = None
             if self.enable_cache and self.cache is not None:
-                # FastEmbed embedding runs locally
                 query_emb = self.embeddings.embed_query(user_input)
                 cache_hit = self.cache.lookup(query_emb)
                 if cache_hit:
                     cached_answer, score, matched_q = cache_hit
                     log.info("Returning async cached response", similarity=score, matched_query=matched_q)
+                    try:
+                        record_cache_hit_trace(
+                            query=user_input,
+                            matched_query=matched_q,
+                            similarity_score=score,
+                            answer=cached_answer,
+                            session_id=self.session_id or "default",
+                        )
+                    except Exception as te:
+                        log.debug("Cache hit trace recording skipped", error=str(te))
                     return cached_answer
 
-            # 2. Async chain execution
+            # 2. Async chain execution with LangSmith Run Config
             payload = {"input": user_input, "chat_history": chat_history}
-            answer = await self.chain.ainvoke(payload)
+            run_config = build_run_config(
+                session_id=self.session_id or "default",
+                run_name="ConversationalRAG_Async",
+                extra_tags=["async"],
+            )
+            answer = await self.chain.ainvoke(payload, config=run_config)
             if not answer:
                 return "no answer generated."
 
@@ -209,13 +244,18 @@ class ConversationalRAG:
             raise DocumentPortalException("Async invocation error in ConversationalRAG", sys)
 
     async def astream(self, user_input: str, chat_history: Optional[List[BaseMessage]] = None) -> AsyncIterator[str]:
-        """Asynchronously stream answer tokens in real time (ideal for FastAPI SSE or WebSockets)."""
+        """Asynchronously stream answer tokens in real time with LangSmith tracing."""
         if self.chain is None:
             raise DocumentPortalException("RAG chain not initialized", sys)
         chat_history = chat_history or []
         payload = {"input": user_input, "chat_history": chat_history}
+        run_config = build_run_config(
+            session_id=self.session_id or "default",
+            run_name="ConversationalRAG_AsyncStream",
+            extra_tags=["stream", "async"],
+        )
 
-        async for chunk in self.chain.astream(payload):
+        async for chunk in self.chain.astream(payload, config=run_config):
             yield chunk
 
     # ---------- Internals ----------
@@ -229,13 +269,13 @@ class ConversationalRAG:
             if self.retriever is None:
                 raise DocumentPortalException("No retriever set before building chain", sys)
 
-            # 1) Question rewriter for multi-turn history
+            # 1) Question rewriter for multi-turn history with explicit span names
             question_rewriter = (
                 {"input": itemgetter("input"), "chat_history": itemgetter("chat_history")}
-                | self.contextualize_prompt
-                | self.llm
-                | StrOutputParser()
-            )
+                | self.contextualize_prompt.with_config(run_name="ContextualizePrompt")
+                | self.llm.with_config(run_name="HistoryRewriterLLM")
+                | StrOutputParser().with_config(run_name="RewriterOutputParser")
+            ).with_config(run_name="Question_Rewriter")
 
             # Route: if chat_history is empty, use user input directly; otherwise rewrite
             def route_query(input_dict: dict) -> str:
@@ -250,8 +290,12 @@ class ConversationalRAG:
                     return input_dict["input"]
                 return await question_rewriter.ainvoke(input_dict)
 
-            # 2) Retrieve relevant context
-            retrieve_docs = route_query | self.retriever | self._format_docs
+            # 2) Retrieve relevant context with explicit retriever span name
+            retrieve_docs = (
+                route_query 
+                | self.retriever.with_config(run_name="InMemoryVectorRetriever") 
+                | self._format_docs
+            ).with_config(run_name="Document_Retriever")
 
             # 3) Generate final answer
             self.chain = (
@@ -260,12 +304,13 @@ class ConversationalRAG:
                     "input": itemgetter("input"),
                     "chat_history": itemgetter("chat_history"),
                 }
-                | self.qa_prompt
-                | self.llm
-                | StrOutputParser()
-            )
+                | self.qa_prompt.with_config(run_name="ContextQAPrompt")
+                | self.llm.with_config(run_name="GroqSynthesisLLM")
+                | StrOutputParser().with_config(run_name="SynthesisOutputParser")
+            ).with_config(run_name="ConversationalRAG_Chain")
 
             log.info("LCEL graph built successfully", session_id=self.session_id)
         except Exception as e:
             log.error("Failed to build LCEL chain", error=str(e), session_id=self.session_id)
+            raise DocumentPortalException("Failed to build LCEL chain", sys)
             raise DocumentPortalException("Failed to build LCEL chain", sys)

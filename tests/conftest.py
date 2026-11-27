@@ -33,12 +33,20 @@ from multi_doc_chat.src.document_chat.retrieval import (
 
 @pytest.fixture(autouse=True)
 def reset_session_state():
-    """Clear in-memory vector stores and RAG instances before and after each test."""
+    """Clear in-memory vector stores, RAG instances, and test disk indexes before and after each test."""
     SESSION_VECTOR_STORES.clear()
     main.RAG_INSTANCES.clear()
     yield
     SESSION_VECTOR_STORES.clear()
     main.RAG_INSTANCES.clear()
+    # Clean up test index files
+    index_dir = pathlib.Path("data/indexes")
+    if index_dir.exists():
+        for f in index_dir.glob("test_*.json"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
 
 
 @pytest.fixture

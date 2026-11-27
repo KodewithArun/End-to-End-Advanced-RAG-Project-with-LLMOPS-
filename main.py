@@ -9,11 +9,14 @@ from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.tracers.context import collect_runs
 
 from multi_doc_chat.src.document_ingestion.data_ingestion import (
     ChatIngestor,
     SESSION_VECTOR_STORES,
     get_session_vector_store,
+    delete_persisted_vector_store,
+    discover_and_load_all_persisted_sessions,
 )
 from multi_doc_chat.src.document_chat.retrieval import ConversationalRAG
 from multi_doc_chat.model.models import (
@@ -21,6 +24,15 @@ from multi_doc_chat.model.models import (
     ChatResponse,
     IngestResponse,
     HealthResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+    AlertsResponse,
+)
+from multi_doc_chat.observability import (
+    is_tracing_enabled,
+    get_langsmith_project,
+    record_feedback,
+    ALERT_MANAGER,
 )
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
@@ -115,6 +127,7 @@ def get_or_create_rag(session_id: str) -> ConversationalRAG:
 @app.exception_handler(DocumentPortalException)
 async def portal_exception_handler(request: Request, exc: DocumentPortalException):
     log.error("DocumentPortalException handled", error=exc.error_message, file=exc.file_name, line=exc.lineno)
+    ALERT_MANAGER.record_pipeline_error(exc.error_message)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"success": False, "error": "Internal RAG Pipeline Error", "detail": exc.error_message},
@@ -144,6 +157,8 @@ async def health_check():
         model_name=llm_provider,
         embedding_provider=emb_provider,
         caching_enabled=True,
+        langsmith_tracing=is_tracing_enabled(),
+        langsmith_project=get_langsmith_project(),
     )
 
 
@@ -199,8 +214,8 @@ async def ingest_documents(
 @app.post("/api/v1/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    Standard question-answering with Semantic Caching.
-    Returns answer, latency in ms, and cache hit indicator.
+    Standard question-answering with Semantic Caching and LangSmith Trace Tracking.
+    Returns answer, latency in ms, cache hit indicator, and LangSmith Run ID.
     """
     start_time = time.perf_counter()
     rag = get_or_create_rag(request.session_id)
@@ -213,13 +228,23 @@ async def chat(request: ChatRequest):
         else:
             history_messages.append(AIMessage(content=msg.content))
 
-    # Check cache status prior to execution
-    cache_before_size = rag.cache.size() if rag.cache else 0
-    answer = await rag.ainvoke(request.query, chat_history=history_messages)
-    duration_ms = (time.perf_counter() - start_time) * 1000
+    # Trace run execution
+    run_id = None
+    with collect_runs() as cb:
+        answer = await rag.ainvoke(request.query, chat_history=history_messages)
+        if cb.traced_runs:
+            run_id = str(cb.traced_runs[0].id)
 
-    # If cache size did not grow and latency is extremely low (<50ms), it was a cache hit
+    duration_ms = (time.perf_counter() - start_time) * 1000
     cache_hit = duration_ms < 50.0
+
+    # Operational Anomaly Check for High Latency
+    ALERT_MANAGER.check_latency_anomaly(
+        latency_ms=duration_ms,
+        session_id=request.session_id,
+        run_id=run_id,
+        query=request.query,
+    )
 
     return ChatResponse(
         session_id=request.session_id,
@@ -227,13 +252,14 @@ async def chat(request: ChatRequest):
         answer=answer,
         cache_hit=cache_hit,
         latency_ms=round(duration_ms, 2),
+        run_id=run_id,
     )
 
 
 @app.post("/api/v1/chat/stream")
 async def chat_stream(request: ChatRequest):
     """
-    Server-Sent Events (SSE) streaming endpoint.
+    Server-Sent Events (SSE) streaming endpoint with LangSmith Tracing.
     Streams answer tokens in real time directly from Groq LLM.
     """
     try:
@@ -266,10 +292,12 @@ async def chat_stream(request: ChatRequest):
 
             # Stream live tokens from LLM
             collected_tokens = []
-            async for token in rag.astream(request.query, chat_history=history_messages):
-                collected_tokens.append(token)
-                data = json.dumps({"token": token, "cached": False, "done": False})
-                yield f"data: {data}\n\n"
+            with collect_runs() as cb:
+                async for token in rag.astream(request.query, chat_history=history_messages):
+                    collected_tokens.append(token)
+                    data = json.dumps({"token": token, "cached": False, "done": False})
+                    yield f"data: {data}\n\n"
+                stream_run_id = str(cb.traced_runs[0].id) if cb.traced_runs else None
 
             # Store in cache once finished
             full_ans = "".join(collected_tokens)
@@ -277,7 +305,7 @@ async def chat_stream(request: ChatRequest):
                 emb = rag.embeddings.embed_query(request.query)
                 rag.cache.store(request.query, emb, full_ans)
 
-            yield f"data: {json.dumps({'done': True})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'run_id': stream_run_id})}\n\n"
         except Exception as e:
             log.error("Error during streaming response", error=str(e))
             yield f"data: {json.dumps({'token': f'❌ Error: {str(e)}', 'error': str(e), 'done': True})}\n\n"
@@ -285,9 +313,42 @@ async def chat_stream(request: ChatRequest):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
+@app.post("/api/v1/feedback", response_model=FeedbackResponse)
+async def submit_feedback(request: FeedbackRequest):
+    """
+    Submit user evaluation or feedback score (e.g. thumbs-up/down) to LangSmith.
+    Triggers an anomaly alert if score is below the operational threshold.
+    """
+    feedback_id = record_feedback(
+        run_id=request.run_id,
+        score=request.score,
+        key=request.key,
+        comment=request.comment,
+    )
+
+    # Anomaly Trigger on Low Feedback Score
+    ALERT_MANAGER.check_feedback_anomaly(
+        score=request.score,
+        run_id=request.run_id,
+        comment=request.comment,
+    )
+
+    if not feedback_id:
+        return FeedbackResponse(
+            success=False,
+            message="Feedback could not be recorded (LangSmith client unavailable or run not found).",
+        )
+
+    return FeedbackResponse(
+        success=True,
+        feedback_id=feedback_id,
+        message="Feedback successfully recorded in LangSmith.",
+    )
+
+
 @app.get("/api/v1/sessions")
 async def list_sessions():
-    """List all currently active in-memory sessions."""
+    """List all currently active in-memory and persisted sessions."""
     sessions = []
     for sid in SESSION_VECTOR_STORES.keys():
         rag = RAG_INSTANCES.get(sid)
@@ -300,15 +361,53 @@ async def list_sessions():
 
 @app.delete("/api/v1/sessions/{session_id}")
 async def delete_session(session_id: str):
-    """Delete a session, freeing its in-memory vector store and cache."""
+    """Delete a session, freeing its in-memory vector store, cache, and disk persistence."""
     deleted_vs = SESSION_VECTOR_STORES.pop(session_id, None)
     deleted_rag = RAG_INSTANCES.pop(session_id, None)
+    deleted_disk = delete_persisted_vector_store(session_id)
 
-    if not deleted_vs and not deleted_rag:
+    if not deleted_vs and not deleted_rag and not deleted_disk:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
 
-    log.info("Session successfully removed from memory", session_id=session_id)
-    return {"success": True, "message": f"Session '{session_id}' cleared from memory."}
+    log.info("Session successfully removed from memory and disk", session_id=session_id)
+    return {"success": True, "message": f"Session '{session_id}' cleared from memory and disk."}
+
+
+@app.get("/api/v1/alerts", response_model=AlertsResponse)
+async def get_alerts():
+    """Operational anomaly statistics and recent alert triggers."""
+    return AlertsResponse(
+        statistics=ALERT_MANAGER.get_alert_statistics(),
+        recent_alerts=ALERT_MANAGER.get_recent_alerts(),
+    )
+
+
+@app.post("/api/v1/alerts/test")
+async def trigger_test_alert(alert_type: str = "HIGH_LATENCY"):
+    """Trigger a manual test alert for monitoring verification."""
+    alert = ALERT_MANAGER.trigger_test_alert(alert_type=alert_type)
+    return {"success": True, "alert": alert.model_dump(), "message": "Test anomaly alert generated."}
+
+
+@app.delete("/api/v1/alerts")
+async def clear_alerts():
+    """Clear all stored alerts."""
+    ALERT_MANAGER.clear_alerts()
+    return {"success": True, "message": "Alert buffer cleared."}
+
+
+@app.post("/api/v1/alerts/webhook")
+async def receive_alert_webhook(payload: dict):
+    """Ingest external alert webhooks from LangSmith rules or cloud monitoring systems."""
+    log.info("External alert webhook received", payload=payload)
+    return {"status": "received", "timestamp": time.time()}
+
+
+# Auto-restore persisted sessions on application startup
+try:
+    discover_and_load_all_persisted_sessions()
+except Exception as _startup_e:
+    log.warning("Could not restore persisted sessions on startup", error=str(_startup_e))
 
 
 if __name__ == "__main__":
