@@ -196,6 +196,17 @@ Every push to `main` and `develop` triggers the automated workflow defined in [`
 
 ---
 
+## ☁️ Continuous Deployment to AWS ECS (Fargate)
+
+The repository includes a complete automated deployment pipeline to **AWS ECS Fargate** with an Application Load Balancer and CloudWatch logging:
+
+* **Task Definition Blueprint:** [`deploy/aws/task-definition.json`](deploy/aws/task-definition.json)
+* **1-Click Infrastructure (VPC + ALB + Cluster):** [`deploy/aws/cloudformation.yml`](deploy/aws/cloudformation.yml)
+* **Automated CD Workflow:** [`.github/workflows/deploy-ecs.yml`](.github/workflows/deploy-ecs.yml)
+* **Step-by-Step Deployment Runbook:** Check out the complete beginner-friendly walkthrough at [**`docs/AWS_ECS_DEPLOYMENT.md`**](docs/AWS_ECS_DEPLOYMENT.md).
+
+---
+
 ## 📄 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
