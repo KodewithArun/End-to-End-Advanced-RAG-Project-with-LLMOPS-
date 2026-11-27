@@ -60,3 +60,9 @@ class HealthResponse(BaseModel):
     caching_enabled: bool
     langsmith_tracing: bool = False
     langsmith_project: Optional[str] = None
+    persistence_enabled: bool = True
+
+
+class AlertsResponse(BaseModel):
+    statistics: dict
+    recent_alerts: list

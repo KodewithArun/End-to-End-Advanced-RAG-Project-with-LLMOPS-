@@ -5,6 +5,10 @@ from langchain_core.documents import Document
 from multi_doc_chat.src.document_ingestion.data_ingestion import (
     generate_session_id,
     get_session_vector_store,
+    persist_session_vector_store,
+    load_persisted_vector_store,
+    delete_persisted_vector_store,
+    discover_and_load_all_persisted_sessions,
     ChatIngestor,
     SESSION_VECTOR_STORES,
 )
@@ -104,3 +108,65 @@ def test_build_retriever_empty_or_invalid_raises_exception(tmp_path: pathlib.Pat
 
     with pytest.raises(DocumentPortalException):
         ingestor.build_retriever([non_existent])
+
+
+def test_persistent_vector_store_disk_dump_and_reload(sample_text_file: pathlib.Path, tmp_path: pathlib.Path):
+    """Verify in-memory vector store can be dumped to disk and restored across simulated process restart."""
+    session_id = "test_persistence_lifecycle"
+    index_dir = tmp_path / "custom_indexes"
+
+    # 1. Ingest document and persist
+    ingestor = ChatIngestor(temp_base=str(tmp_path), session_id=session_id, index_dir=index_dir)
+    ingestor.build_retriever([sample_text_file], chunk_size=300, chunk_overlap=50)
+
+    persisted_file = index_dir / f"{session_id}.json"
+    assert persisted_file.exists(), "Expected vector store index file to be saved on disk."
+
+    # 2. Simulate server restart: clear in-memory dictionary
+    SESSION_VECTOR_STORES.clear()
+    assert session_id not in SESSION_VECTOR_STORES
+
+    # 3. Reload from disk using get_session_vector_store
+    restored_vs = get_session_vector_store(session_id, embeddings=ingestor.emb, index_dir=index_dir)
+    assert restored_vs is not None
+    assert session_id in SESSION_VECTOR_STORES
+
+    # 4. Verify search results on restored vector store
+    retriever = restored_vs.as_retriever(search_kwargs={"k": 2})
+    results = retriever.invoke("pillars of Agentic AI")
+    assert len(results) > 0
+
+
+def test_delete_persisted_vector_store(sample_text_file: pathlib.Path, tmp_path: pathlib.Path):
+    """Verify delete_persisted_vector_store removes index file from disk."""
+    session_id = "test_delete_persistence"
+    index_dir = tmp_path / "indexes_to_clean"
+
+    ingestor = ChatIngestor(temp_base=str(tmp_path), session_id=session_id, index_dir=index_dir)
+    ingestor.build_retriever([sample_text_file])
+    assert (index_dir / f"{session_id}.json").exists()
+
+    # Delete index file
+    deleted = delete_persisted_vector_store(session_id, index_dir=index_dir)
+    assert deleted is True
+    assert not (index_dir / f"{session_id}.json").exists()
+
+
+def test_discover_and_load_all_persisted_sessions(sample_text_file: pathlib.Path, tmp_path: pathlib.Path):
+    """Verify scanning directory restores multiple persisted sessions."""
+    index_dir = tmp_path / "multi_sessions"
+    sid1 = "test_sess_01"
+    sid2 = "test_sess_02"
+
+    ing1 = ChatIngestor(temp_base=str(tmp_path), session_id=sid1, index_dir=index_dir)
+    ing1.build_retriever([sample_text_file])
+
+    ing2 = ChatIngestor(temp_base=str(tmp_path), session_id=sid2, index_dir=index_dir)
+    ing2.build_retriever([sample_text_file])
+
+    SESSION_VECTOR_STORES.clear()
+    loaded = discover_and_load_all_persisted_sessions(embeddings=ing1.emb, index_dir=index_dir)
+    assert sid1 in loaded
+    assert sid2 in loaded
+    assert sid1 in SESSION_VECTOR_STORES
+    assert sid2 in SESSION_VECTOR_STORES

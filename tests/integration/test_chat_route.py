@@ -132,3 +132,20 @@ def test_session_management_list_and_delete(client):
     # Check that session was cleared
     list_resp_after = client.get("/api/v1/sessions")
     assert not any(s["session_id"] == session_id for s in list_resp_after.json()["sessions"])
+
+
+def test_alerts_endpoints_and_anomaly_statistics(client):
+    """Test GET /api/v1/alerts and POST /api/v1/alerts/webhook."""
+    # 1. Inspect alerts endpoint
+    resp = client.get("/api/v1/alerts")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "statistics" in data
+    assert "recent_alerts" in data
+    assert "active_thresholds" in data["statistics"]
+
+    # 2. Test receiving external webhook
+    wh_payload = {"event": "langsmith_rule_trigger", "rule_id": "r123", "severity": "WARNING"}
+    wh_resp = client.post("/api/v1/alerts/webhook", json=wh_payload)
+    assert wh_resp.status_code == 200
+    assert wh_resp.json()["status"] == "received"

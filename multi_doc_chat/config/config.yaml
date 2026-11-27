@@ -18,3 +18,14 @@ llm:
     model_name: "gemini-2.0-flash"
     temperature: 0
     max_output_tokens: 2048
+
+persistence:
+  enabled: true
+  index_dir: "data/indexes"
+  auto_reload_on_startup: true
+
+alerting:
+  enabled: true
+  latency_threshold_ms: 2500.0
+  low_score_threshold: 0.60
+  max_buffered_alerts: 100
