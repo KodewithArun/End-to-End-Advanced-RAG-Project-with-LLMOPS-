@@ -59,7 +59,14 @@ class AlertManager:
         self._init_redis()
 
     def _init_redis(self) -> None:
-        target_url = os.getenv("REDIS_URL") or "redis://127.0.0.1:6379/0"
+        target_url = os.getenv("REDIS_URL")
+        if not target_url:
+            try:
+                from multi_doc_chat.utils.config_loader import load_config
+                target_url = load_config().get("distributed_cache", {}).get("redis_url")
+            except Exception:
+                target_url = None
+        target_url = target_url or "redis://127.0.0.1:6379/0"
         try:
             import redis
             client = redis.from_url(target_url, socket_timeout=1.0, decode_responses=True)

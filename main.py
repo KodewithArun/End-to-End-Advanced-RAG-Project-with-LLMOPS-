@@ -144,6 +144,7 @@ async def index_view(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
 
 
+@app.get("/healthz", response_model=HealthResponse)
 @app.get("/api/v1/health", response_model=HealthResponse)
 async def health_check():
     """System health and operational metrics."""
