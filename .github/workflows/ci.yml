@@ -139,14 +139,14 @@ jobs:
       - name: Configure Target Registries (GHCR & Docker Hub)
         id: registries
         run: |
-          IMAGES="ghcr.io/${{ github.repository }}"
+          CLEAN_REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]' | sed 's/[-._]*$//')
+          IMAGES="ghcr.io/${CLEAN_REPO}"
           if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
             DOCKER_REPO="${{ secrets.DOCKERHUB_REPO }}"
             if [ -z "$DOCKER_REPO" ]; then
               DOCKER_REPO="rag-app"
             fi
-            IMAGES="${IMAGES}
-          ${{ secrets.DOCKERHUB_USERNAME }}/${DOCKER_REPO}"
+            IMAGES=$(printf "%s\n%s/%s" "$IMAGES" "${{ secrets.DOCKERHUB_USERNAME }}" "$DOCKER_REPO")
             echo "has_dockerhub=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_dockerhub=false" >> "$GITHUB_OUTPUT"
