@@ -21,24 +21,44 @@ if not os.environ.get("GROQ_API_KEY"):
     os.environ["GROQ_API_KEY"] = "gsk_dummy_test_key_for_unit_tests"
 
 import main
+from langchain_core.embeddings import Embeddings
 from multi_doc_chat.src.document_ingestion.data_ingestion import (
     SESSION_VECTOR_STORES,
     ChatIngestor,
 )
+from multi_doc_chat.src.document_ingestion.vector_storage import VECTOR_STORE_MANAGER
+from multi_doc_chat.observability import ALERT_MANAGER
 from multi_doc_chat.src.document_chat.retrieval import (
     ConversationalRAG,
     SemanticCache,
 )
 
 
+def _clear_redis():
+    try:
+        import redis
+        r = redis.from_url("redis://127.0.0.1:6379/0", socket_timeout=0.5)
+        keys = r.keys("rag:*")
+        if keys:
+            r.delete(*keys)
+    except Exception:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def reset_session_state():
-    """Clear in-memory vector stores, RAG instances, and test disk indexes before and after each test."""
+    """Clear in-memory vector stores, RAG instances, Qdrant collections, and test disk indexes before and after each test."""
     SESSION_VECTOR_STORES.clear()
     main.RAG_INSTANCES.clear()
+    VECTOR_STORE_MANAGER.reset_all()
+    ALERT_MANAGER.clear_alerts()
+    _clear_redis()
     yield
     SESSION_VECTOR_STORES.clear()
     main.RAG_INSTANCES.clear()
+    VECTOR_STORE_MANAGER.reset_all()
+    ALERT_MANAGER.clear_alerts()
+    _clear_redis()
     # Clean up test index files
     index_dir = pathlib.Path("data/indexes")
     if index_dir.exists():
@@ -77,7 +97,7 @@ def sample_bytes_file():
     return ("llmops_overview.txt", io.BytesIO(content), "text/plain")
 
 
-class DummyEmbeddings:
+class DummyEmbeddings(Embeddings):
     """Deterministic, zero-latency embeddings for fast unit tests without downloading weights."""
     def embed_query(self, text: str) -> list[float]:
         # Simple hash-based deterministic 16-dim normalized vector

@@ -186,6 +186,11 @@ async def ingest_documents(
         )
 
         sid = ingestor.session_id
+        # Invalidate prior cached answers for this session upon new document ingestion
+        old_rag = RAG_INSTANCES.get(sid)
+        if old_rag and old_rag.cache:
+            old_rag.cache.invalidate_session(sid)
+
         # Invalidate or re-create RAG instance with new retriever
         RAG_INSTANCES[sid] = ConversationalRAG(
             session_id=sid,
@@ -236,7 +241,7 @@ async def chat(request: ChatRequest):
             run_id = str(cb.traced_runs[0].id)
 
     duration_ms = (time.perf_counter() - start_time) * 1000
-    cache_hit = duration_ms < 50.0
+    cache_hit = bool(getattr(rag, "last_cache_hit", {}).get("hit", False)) or (duration_ms < 35.0)
 
     # Operational Anomaly Check for High Latency
     ALERT_MANAGER.check_latency_anomaly(
@@ -280,13 +285,13 @@ async def chat_stream(request: ChatRequest):
 
     async def event_generator():
         try:
-            # First check semantic cache
+            # First check semantic cache with tiered lookup
             if rag.enable_cache and rag.cache:
                 emb = rag.embeddings.embed_query(request.query)
-                cached = rag.cache.lookup(emb)
+                cached = rag.cache.lookup_detailed(emb, query=request.query, session_id=request.session_id)
                 if cached:
-                    ans, score, matched_q = cached
-                    data = json.dumps({"token": ans, "cached": True, "done": True})
+                    ans, score, matched_q, tier = cached
+                    data = json.dumps({"token": ans, "cached": True, "tier": tier, "done": True})
                     yield f"data: {data}\n\n"
                     return
 
@@ -303,7 +308,7 @@ async def chat_stream(request: ChatRequest):
             full_ans = "".join(collected_tokens)
             if rag.enable_cache and rag.cache and full_ans.strip():
                 emb = rag.embeddings.embed_query(request.query)
-                rag.cache.store(request.query, emb, full_ans)
+                rag.cache.store(request.query, emb, full_ans, session_id=request.session_id)
 
             yield f"data: {json.dumps({'done': True, 'run_id': stream_run_id})}\n\n"
         except Exception as e:
@@ -349,21 +354,30 @@ async def submit_feedback(request: FeedbackRequest):
 @app.get("/api/v1/sessions")
 async def list_sessions():
     """List all currently active in-memory and persisted sessions."""
+    from multi_doc_chat.src.document_ingestion.vector_storage import VECTOR_STORE_MANAGER
+    all_sids = set(SESSION_VECTOR_STORES.keys())
+    try:
+        all_sids.update(VECTOR_STORE_MANAGER.list_sessions())
+    except Exception:
+        pass
+
     sessions = []
-    for sid in SESSION_VECTOR_STORES.keys():
+    for sid in sorted(list(all_sids)):
         rag = RAG_INSTANCES.get(sid)
         sessions.append({
             "session_id": sid,
-            "cached_queries": rag.cache.size() if rag and rag.cache else 0,
+            "cached_queries": rag.cache.size(sid) if rag and rag.cache else 0,
         })
     return {"sessions": sessions, "total_active": len(sessions)}
 
 
 @app.delete("/api/v1/sessions/{session_id}")
 async def delete_session(session_id: str):
-    """Delete a session, freeing its in-memory vector store, cache, and disk persistence."""
+    """Delete a session, freeing its vector store, cache, and disk persistence."""
     deleted_vs = SESSION_VECTOR_STORES.pop(session_id, None)
     deleted_rag = RAG_INSTANCES.pop(session_id, None)
+    if deleted_rag and deleted_rag.cache:
+        deleted_rag.cache.invalidate_session(session_id)
     deleted_disk = delete_persisted_vector_store(session_id)
 
     if not deleted_vs and not deleted_rag and not deleted_disk:

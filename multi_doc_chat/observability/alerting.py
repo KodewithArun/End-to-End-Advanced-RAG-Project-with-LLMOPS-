@@ -55,6 +55,19 @@ class AlertManager:
         self.max_buffered_alerts = max_buffered_alerts
         self.webhook_url = webhook_url or os.getenv("ALERT_WEBHOOK_URL")
         self.alerts: List[AlertEvent] = []
+        self.redis_client = None
+        self._init_redis()
+
+    def _init_redis(self) -> None:
+        target_url = os.getenv("REDIS_URL") or "redis://127.0.0.1:6379/0"
+        try:
+            import redis
+            client = redis.from_url(target_url, socket_timeout=1.0, decode_responses=True)
+            client.ping()
+            self.redis_client = client
+            log.info("AlertManager connected to distributed Redis buffer", url=target_url)
+        except Exception:
+            self.redis_client = None
 
     @classmethod
     def from_config(cls) -> "AlertManager":
@@ -70,10 +83,18 @@ class AlertManager:
             return cls()
 
     def _record_alert(self, alert: AlertEvent) -> None:
-        """Buffer alert and notify external webhooks if configured."""
+        """Buffer alert in local memory and shared Redis, and notify external webhooks if configured."""
         if len(self.alerts) >= self.max_buffered_alerts:
             self.alerts.pop(0)
         self.alerts.append(alert)
+
+        if self.redis_client is not None:
+            try:
+                import json
+                self.redis_client.lpush("rag:alerts:history", json.dumps(alert.model_dump()))
+                self.redis_client.ltrim("rag:alerts:history", 0, self.max_buffered_alerts - 1)
+            except Exception as re:
+                log.debug("Redis alert buffer notice", error=str(re))
 
         log.warning(
             "AnomalyAlertTriggered",
@@ -168,19 +189,30 @@ class AlertManager:
         return alert
 
     def get_recent_alerts(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Return the most recent alerts."""
+        """Return the most recent alerts from Redis or memory buffer."""
+        if self.redis_client is not None:
+            try:
+                import json
+                items = self.redis_client.lrange("rag:alerts:history", 0, limit - 1)
+                if items:
+                    return [json.loads(x) for x in items]
+            except Exception as re:
+                log.debug("Redis lrange notice", error=str(re))
+
         return [a.model_dump() for a in reversed(self.alerts[-limit:])]
 
     def get_alert_statistics(self) -> Dict[str, Any]:
         """Aggregate statistics on alert occurrences and severities."""
-        total = len(self.alerts)
-        critical_count = sum(1 for a in self.alerts if a.severity == AlertSeverity.CRITICAL)
-        warning_count = sum(1 for a in self.alerts if a.severity == AlertSeverity.WARNING)
+        alerts = self.get_recent_alerts(limit=self.max_buffered_alerts)
+        total = len(alerts)
+        critical_count = sum(1 for a in alerts if a.get("severity") == AlertSeverity.CRITICAL.value or a.get("severity") == AlertSeverity.CRITICAL)
+        warning_count = sum(1 for a in alerts if a.get("severity") == AlertSeverity.WARNING.value or a.get("severity") == AlertSeverity.WARNING)
         
         type_breakdown: Dict[str, int] = {}
-        for a in self.alerts:
-            val = a.alert_type.value
-            type_breakdown[val] = type_breakdown.get(val, 0) + 1
+        for a in alerts:
+            val = a.get("alert_type")
+            if val:
+                type_breakdown[val] = type_breakdown.get(val, 0) + 1
 
         return {
             "total_alerts": total,
@@ -195,8 +227,13 @@ class AlertManager:
         }
 
     def clear_alerts(self) -> None:
-        """Clear all buffered alerts."""
+        """Clear all buffered alerts in local memory and Redis."""
         self.alerts.clear()
+        if self.redis_client is not None:
+            try:
+                self.redis_client.delete("rag:alerts:history")
+            except Exception as re:
+                log.debug("Redis alert delete notice", error=str(re))
         log.info("Alerts buffer cleared")
 
     def trigger_test_alert(self, alert_type: str = "HIGH_LATENCY") -> AlertEvent:

@@ -44,7 +44,8 @@ class ConversationalRAG:
             self.embeddings = self.model_loader.load_embeddings()
 
             # Initialize semantic cache
-            self.cache = SemanticCache(similarity_threshold=cache_threshold) if enable_cache else None
+            self.cache = SemanticCache.from_config(similarity_threshold=cache_threshold) if enable_cache else None
+            self.last_cache_hit = {"hit": False, "tier": None}
 
             # Load prompts
             self.contextualize_prompt: ChatPromptTemplate = PROMPT_REGISTRY[
@@ -128,22 +129,39 @@ class ConversationalRAG:
                     "RAG chain not initialized. Provide retriever or call load_retriever_from_memory() first.", sys
                 )
             chat_history = chat_history or []
+            sid = self.session_id or "default"
+            self.last_cache_hit = {"hit": False, "tier": None}
 
-            # 1. Semantic Cache check (only for initial questions without chat context dependency)
+            # 1. Semantic Cache check with multi-turn context resolution
             query_emb = None
             if self.enable_cache and self.cache is not None:
+                # Fast path: check direct user input embedding
                 query_emb = self.embeddings.embed_query(user_input)
-                cache_hit = self.cache.lookup(query_emb)
+                cache_hit = self.cache.lookup_detailed(query_emb, query=user_input, session_id=sid)
+
+                # Contextual fallback: if direct missed and conversation history exists, rewrite
+                if not cache_hit and chat_history:
+                    try:
+                        resolved_query = self._rewrite_query(user_input, chat_history)
+                        if resolved_query != user_input:
+                            resolved_emb = self.embeddings.embed_query(resolved_query)
+                            cache_hit = self.cache.lookup_detailed(resolved_emb, query=resolved_query, session_id=sid)
+                            if cache_hit:
+                                query_emb = resolved_emb
+                    except Exception:
+                        pass
+
                 if cache_hit:
-                    cached_answer, score, matched_q = cache_hit
-                    log.info("Returning cached response", similarity=score, matched_query=matched_q)
+                    cached_answer, score, matched_q, tier = cache_hit
+                    self.last_cache_hit = {"hit": True, "tier": tier, "score": score, "matched_query": matched_q}
+                    log.info("Returning cached response", tier=tier, similarity=score, matched_query=matched_q)
                     try:
                         record_cache_hit_trace(
                             query=user_input,
                             matched_query=matched_q,
                             similarity_score=score,
                             answer=cached_answer,
-                            session_id=self.session_id or "default",
+                            session_id=sid,
                         )
                     except Exception as te:
                         log.debug("Cache hit trace recording skipped", error=str(te))
@@ -152,7 +170,7 @@ class ConversationalRAG:
             # 2. Execute LCEL chain with LangSmith Run Config
             payload = {"input": user_input, "chat_history": chat_history}
             run_config = build_run_config(
-                session_id=self.session_id or "default",
+                session_id=sid,
                 run_name="ConversationalRAG_Sync",
                 extra_tags=["sync"],
             )
@@ -166,7 +184,7 @@ class ConversationalRAG:
 
             # 4. Save to Semantic Cache
             if self.enable_cache and self.cache is not None and query_emb is not None:
-                self.cache.store(user_input, query_emb, final_answer)
+                self.cache.store(user_input, query_emb, final_answer, session_id=sid)
 
             return final_answer
 
@@ -197,22 +215,39 @@ class ConversationalRAG:
             if self.chain is None:
                 raise DocumentPortalException("RAG chain not initialized", sys)
             chat_history = chat_history or []
+            sid = self.session_id or "default"
+            self.last_cache_hit = {"hit": False, "tier": None}
 
-            # 1. Semantic Cache check
+            # 1. Semantic Cache check with multi-turn context resolution
             query_emb = None
             if self.enable_cache and self.cache is not None:
+                # Fast path: check direct user input embedding
                 query_emb = self.embeddings.embed_query(user_input)
-                cache_hit = self.cache.lookup(query_emb)
+                cache_hit = self.cache.lookup_detailed(query_emb, query=user_input, session_id=sid)
+
+                # Contextual fallback: if direct missed and conversation history exists, rewrite
+                if not cache_hit and chat_history:
+                    try:
+                        resolved_query = await self._arewrite_query(user_input, chat_history)
+                        if resolved_query != user_input:
+                            resolved_emb = self.embeddings.embed_query(resolved_query)
+                            cache_hit = self.cache.lookup_detailed(resolved_emb, query=resolved_query, session_id=sid)
+                            if cache_hit:
+                                query_emb = resolved_emb
+                    except Exception:
+                        pass
+
                 if cache_hit:
-                    cached_answer, score, matched_q = cache_hit
-                    log.info("Returning async cached response", similarity=score, matched_query=matched_q)
+                    cached_answer, score, matched_q, tier = cache_hit
+                    self.last_cache_hit = {"hit": True, "tier": tier, "score": score, "matched_query": matched_q}
+                    log.info("Returning async cached response", tier=tier, similarity=score, matched_query=matched_q)
                     try:
                         record_cache_hit_trace(
                             query=user_input,
                             matched_query=matched_q,
                             similarity_score=score,
                             answer=cached_answer,
-                            session_id=self.session_id or "default",
+                            session_id=sid,
                         )
                     except Exception as te:
                         log.debug("Cache hit trace recording skipped", error=str(te))
@@ -221,7 +256,7 @@ class ConversationalRAG:
             # 2. Async chain execution with LangSmith Run Config
             payload = {"input": user_input, "chat_history": chat_history}
             run_config = build_run_config(
-                session_id=self.session_id or "default",
+                session_id=sid,
                 run_name="ConversationalRAG_Async",
                 extra_tags=["async"],
             )
@@ -235,7 +270,7 @@ class ConversationalRAG:
 
             # 4. Save to Semantic Cache
             if self.enable_cache and self.cache is not None and query_emb is not None:
-                self.cache.store(user_input, query_emb, final_answer)
+                self.cache.store(user_input, query_emb, final_answer, session_id=sid)
 
             return final_answer
 
@@ -259,6 +294,30 @@ class ConversationalRAG:
             yield chunk
 
     # ---------- Internals ----------
+
+    def _rewrite_query(self, user_input: str, chat_history: List[BaseMessage]) -> str:
+        if not chat_history:
+            return user_input
+        payload = {"input": user_input, "chat_history": chat_history}
+        rewriter = (
+            {"input": itemgetter("input"), "chat_history": itemgetter("chat_history")}
+            | self.contextualize_prompt
+            | self.llm
+            | StrOutputParser()
+        )
+        return str(rewriter.invoke(payload))
+
+    async def _arewrite_query(self, user_input: str, chat_history: List[BaseMessage]) -> str:
+        if not chat_history:
+            return user_input
+        payload = {"input": user_input, "chat_history": chat_history}
+        rewriter = (
+            {"input": itemgetter("input"), "chat_history": itemgetter("chat_history")}
+            | self.contextualize_prompt
+            | self.llm
+            | StrOutputParser()
+        )
+        return str(await rewriter.ainvoke(payload))
 
     @staticmethod
     def _format_docs(docs) -> str:
