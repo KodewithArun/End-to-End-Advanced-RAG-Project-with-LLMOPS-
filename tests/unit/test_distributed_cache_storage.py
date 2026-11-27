@@ -1,10 +1,8 @@
-import pytest
 import numpy as np
 from langchain_core.documents import Document
 
 from multi_doc_chat.utils.semantic_cache import TieredSemanticCache
 from multi_doc_chat.src.document_ingestion.vector_storage import VectorStoreManager
-from multi_doc_chat.observability.alerting import AlertManager, AlertType, AlertSeverity
 
 
 def test_tiered_cache_l1_exact_match():
@@ -83,7 +81,7 @@ def test_vector_store_manager_session_isolation(tmp_path):
     """Verify QdrantVectorStore multi-tenant session isolation and deletion."""
     from tests.conftest import DummyEmbeddings
     emb = DummyEmbeddings()
-    
+
     manager = VectorStoreManager(
         backend="qdrant",
         qdrant_url=None,

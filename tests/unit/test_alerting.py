@@ -1,7 +1,5 @@
-import pytest
 from multi_doc_chat.observability.alerting import (
     AlertManager,
-    AlertEvent,
     AlertSeverity,
     AlertType,
 )

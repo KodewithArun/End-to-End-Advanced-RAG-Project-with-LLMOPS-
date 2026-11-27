@@ -42,8 +42,12 @@ env/
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 
-# Pytest
+# Pytest & Coverage
 .pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Runtime and logs
 logs/

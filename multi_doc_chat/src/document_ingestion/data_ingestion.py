@@ -11,8 +11,6 @@ from multi_doc_chat.utils.file_io import save_uploaded_files
 from multi_doc_chat.utils.document_ops import load_documents
 from multi_doc_chat.src.document_ingestion.vector_storage import (
     VECTOR_STORE_MANAGER,
-    VectorStoreManager,
-    SessionVectorStoreProxy,
 )
 from datetime import datetime
 import uuid
@@ -86,7 +84,7 @@ def delete_persisted_vector_store(session_id: str, index_dir: Optional[Path] = N
             deleted = True
         except Exception as e:
             log.error("Failed to delete vector store file", error=str(e), session_id=session_id)
-    
+
     # Also delete from distributed VectorStoreManager
     if VECTOR_STORE_MANAGER.delete_session(session_id):
         deleted = True

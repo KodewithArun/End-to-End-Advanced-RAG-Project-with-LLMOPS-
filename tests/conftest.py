@@ -24,14 +24,9 @@ import main
 from langchain_core.embeddings import Embeddings
 from multi_doc_chat.src.document_ingestion.data_ingestion import (
     SESSION_VECTOR_STORES,
-    ChatIngestor,
 )
 from multi_doc_chat.src.document_ingestion.vector_storage import VECTOR_STORE_MANAGER
 from multi_doc_chat.observability import ALERT_MANAGER
-from multi_doc_chat.src.document_chat.retrieval import (
-    ConversationalRAG,
-    SemanticCache,
-)
 
 
 def _clear_redis():

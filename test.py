@@ -1,4 +1,3 @@
-import os
 import sys
 from dotenv import load_dotenv
 from pathlib import Path
@@ -31,9 +30,9 @@ def test_document_ingestion_and_rag():
         # Build in-memory index using ChatIngestor
         ci = ChatIngestor(temp_base="data", use_session_dirs=True)
         retriever = ci.build_retriever(
-            uploaded_files, 
-            chunk_size=500, 
-            chunk_overlap=50, 
+            uploaded_files,
+            chunk_size=500,
+            chunk_overlap=50,
             k=5
         )
 

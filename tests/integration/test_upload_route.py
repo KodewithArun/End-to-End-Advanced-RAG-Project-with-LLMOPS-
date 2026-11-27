@@ -1,5 +1,4 @@
 import io
-import pytest
 
 
 def test_upload_success_single_file(client, sample_bytes_file):
@@ -57,7 +56,7 @@ def test_upload_custom_chunking_parameters(client):
     # Long text
     content = b"Knowledge representation and reasoning. " * 50  # ~2000 chars
     files = [("files", ("large_text.txt", io.BytesIO(content), "text/plain"))]
-    
+
     # Small chunks of 200 chars -> should produce at least 10 chunks
     data = {"session_id": "chunk_param_sess", "chunk_size": 200, "chunk_overlap": 50}
     resp = client.post("/api/v1/ingest", files=files, data=data)

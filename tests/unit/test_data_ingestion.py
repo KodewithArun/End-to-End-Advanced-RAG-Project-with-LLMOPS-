@@ -5,8 +5,6 @@ from langchain_core.documents import Document
 from multi_doc_chat.src.document_ingestion.data_ingestion import (
     generate_session_id,
     get_session_vector_store,
-    persist_session_vector_store,
-    load_persisted_vector_store,
     delete_persisted_vector_store,
     discover_and_load_all_persisted_sessions,
     ChatIngestor,
@@ -42,7 +40,7 @@ def test_chat_ingestor_session_directories(tmp_path: pathlib.Path):
 def test_split_chunks_respects_size_and_overlap(tmp_path: pathlib.Path):
     """Test recursive character text splitting logic."""
     ingestor = ChatIngestor(temp_base=str(tmp_path), session_id="test_split")
-    
+
     # 2500 character document
     sample_text = ("Artificial Intelligence and Machine Learning are transforming modern software. " * 30)
     docs = [Document(page_content=sample_text, metadata={"source": "ai_overview.txt"})]

@@ -6,7 +6,6 @@ from typing import List, Optional, Dict, Any, AsyncIterator, Iterator
 from langchain_core.messages import BaseMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.vectorstores import InMemoryVectorStore
 
 from multi_doc_chat.utils.model_loader import ModelLoader
 from multi_doc_chat.utils.semantic_cache import SemanticCache
@@ -16,7 +15,6 @@ from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.prompts.prompt_library import PROMPT_REGISTRY
 from multi_doc_chat.model.models import PromptType, ChatAnswer
 from multi_doc_chat.src.document_ingestion.data_ingestion import SESSION_VECTOR_STORES, get_session_vector_store
-from pydantic import ValidationError
 
 
 class ConversationalRAG:
@@ -351,8 +349,8 @@ class ConversationalRAG:
 
             # 2) Retrieve relevant context with explicit retriever span name
             retrieve_docs = (
-                route_query 
-                | self.retriever.with_config(run_name="InMemoryVectorRetriever") 
+                route_query
+                | self.retriever.with_config(run_name="InMemoryVectorRetriever")
                 | self._format_docs
             ).with_config(run_name="Document_Retriever")
 

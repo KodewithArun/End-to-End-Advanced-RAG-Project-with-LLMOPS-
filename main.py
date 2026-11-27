@@ -271,9 +271,10 @@ async def chat_stream(request: ChatRequest):
     try:
         rag = get_or_create_rag(request.session_id)
     except HTTPException as e:
+        err_msg = f"⚠️ {e.detail}"
+
         async def err_generator():
-            msg = f"⚠️ {e.detail}"
-            data = json.dumps({"token": msg, "cached": False, "done": True})
+            data = json.dumps({"token": err_msg, "cached": False, "done": True})
             yield f"data: {data}\n\n"
         return StreamingResponse(err_generator(), media_type="text/event-stream")
 
