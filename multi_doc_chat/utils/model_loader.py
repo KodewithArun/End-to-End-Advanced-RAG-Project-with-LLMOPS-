@@ -1,10 +1,29 @@
 import os
 import sys
 import json
+from typing import List
 from dotenv import load_dotenv
+from langchain_core.embeddings import Embeddings
 from multi_doc_chat.utils.config_loader import load_config
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
+
+
+class NativeFastEmbedEmbeddings(Embeddings):
+    """
+    Native LangChain 1.x compatible wrapper for FastEmbed without langchain-community deprecations.
+    Uses fastembed.TextEmbedding directly.
+    """
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", **kwargs):
+        self.model_name = model_name
+        from fastembed import TextEmbedding
+        self._model = TextEmbedding(model_name=model_name, **kwargs)
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return [list(vec) for vec in self._model.embed(texts)]
+
+    def embed_query(self, text: str) -> List[float]:
+        return list(next(self._model.embed([text])))
 
 
 class ApiKeyManager:
@@ -67,8 +86,7 @@ class ModelLoader:
             log.info("Loading embedding model", provider=provider, model=model_name)
 
             if provider == "fastembed":
-                from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
-                return FastEmbedEmbeddings(model_name=model_name)
+                return NativeFastEmbedEmbeddings(model_name=model_name)
 
             elif provider == "google":
                 from langchain_google_genai import GoogleGenerativeAIEmbeddings

@@ -24,6 +24,21 @@ persistence:
   index_dir: "data/indexes"
   auto_reload_on_startup: true
 
+vector_storage:
+  backend: "qdrant" # "qdrant" or "in_memory"
+  qdrant_url: null # e.g. "http://localhost:6333" or env QDRANT_URL; falls back to local disk
+  local_path: "data/qdrant"
+  collection_name: "documents_knowledge_base"
+  retrieval_mode: "dense" # "dense" or "hybrid"
+
+distributed_cache:
+  backend: "redis" # "redis" or "in_memory"
+  redis_url: null # e.g. "redis://localhost:6379/0" or env REDIS_URL; falls back to in-memory
+  ttl_seconds: 3600
+  similarity_threshold: 0.88
+  l1_exact_enabled: true
+  l2_semantic_enabled: true
+
 alerting:
   enabled: true
   latency_threshold_ms: 2500.0

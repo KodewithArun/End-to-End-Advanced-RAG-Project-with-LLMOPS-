@@ -9,6 +9,11 @@ from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.utils.file_io import save_uploaded_files
 from multi_doc_chat.utils.document_ops import load_documents
+from multi_doc_chat.src.document_ingestion.vector_storage import (
+    VECTOR_STORE_MANAGER,
+    VectorStoreManager,
+    SessionVectorStoreProxy,
+)
 from datetime import datetime
 import uuid
 import sys
@@ -71,30 +76,48 @@ def load_persisted_vector_store(
 
 
 def delete_persisted_vector_store(session_id: str, index_dir: Optional[Path] = None) -> bool:
-    """Remove persisted vector store file from disk."""
+    """Remove persisted vector store file from disk and clear from Qdrant vector store."""
+    deleted = False
     target_path = get_index_path(session_id, index_dir)
     if target_path.exists():
         try:
             target_path.unlink()
             log.info("Deleted persisted vector store file", session_id=session_id, path=str(target_path))
-            return True
+            deleted = True
         except Exception as e:
             log.error("Failed to delete vector store file", error=str(e), session_id=session_id)
-    return False
+    
+    # Also delete from distributed VectorStoreManager
+    if VECTOR_STORE_MANAGER.delete_session(session_id):
+        deleted = True
+
+    return deleted
 
 
 def get_session_vector_store(
     session_id: str,
     embeddings=None,
     index_dir: Optional[Path] = None,
-) -> Optional[InMemoryVectorStore]:
+) -> Optional[Any]:
     """
     Retrieve vector store for a given session.
-    First checks in-memory registry, then falls back to persisted disk index.
+    First checks in-memory registry, then disk index (populating registry),
+    then distributed VectorStoreManager.
     """
     if session_id in SESSION_VECTOR_STORES:
         return SESSION_VECTOR_STORES[session_id]
-    return load_persisted_vector_store(session_id, embeddings=embeddings, index_dir=index_dir)
+
+    persisted = load_persisted_vector_store(session_id, embeddings=embeddings, index_dir=index_dir)
+    if persisted is not None:
+        SESSION_VECTOR_STORES[session_id] = persisted
+        return persisted
+
+    if VECTOR_STORE_MANAGER.has_session(session_id):
+        proxy = VECTOR_STORE_MANAGER.get_session_proxy(session_id)
+        SESSION_VECTOR_STORES[session_id] = proxy
+        return proxy
+
+    return None
 
 
 def discover_and_load_all_persisted_sessions(
@@ -103,19 +126,30 @@ def discover_and_load_all_persisted_sessions(
 ) -> List[str]:
     """Scan index directory on startup and restore all persisted sessions."""
     target_dir = Path(index_dir or DEFAULT_INDEX_DIR)
-    if not target_dir.exists():
-        return []
+    loaded_sessions = set()
 
-    loaded_sessions = []
-    for file_path in target_dir.glob("*.json"):
-        sid = file_path.stem
-        if sid not in SESSION_VECTOR_STORES:
-            vs = load_persisted_vector_store(sid, embeddings=embeddings, index_dir=target_dir)
-            if vs:
-                loaded_sessions.append(sid)
+    if target_dir.exists():
+        for file_path in target_dir.glob("*.json"):
+            sid = file_path.stem
+            if sid not in SESSION_VECTOR_STORES:
+                vs = load_persisted_vector_store(sid, embeddings=embeddings, index_dir=target_dir)
+                if vs:
+                    loaded_sessions.add(sid)
+                    SESSION_VECTOR_STORES[sid] = vs
 
-    log.info("Restored persisted sessions on startup", count=len(loaded_sessions), sessions=loaded_sessions)
-    return loaded_sessions
+    # Also discover sessions from VectorStoreManager
+    try:
+        qdrant_sessions = VECTOR_STORE_MANAGER.list_sessions()
+        for q_sid in qdrant_sessions:
+            loaded_sessions.add(q_sid)
+            if q_sid not in SESSION_VECTOR_STORES:
+                SESSION_VECTOR_STORES[q_sid] = VECTOR_STORE_MANAGER.get_session_proxy(q_sid)
+    except Exception as e:
+        log.debug("VectorStoreManager session discovery notice", error=str(e))
+
+    result = sorted(list(loaded_sessions))
+    log.info("Restored persisted sessions on startup", count=len(result), sessions=result)
+    return result
 
 
 class ChatIngestor:
@@ -183,7 +217,13 @@ class ChatIngestor:
 
             chunks = self._split(docs, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
-            # Retrieve existing vector store for this session or create a new one
+            # 1. Index into Distributed VectorStoreManager (Qdrant with session isolation)
+            try:
+                VECTOR_STORE_MANAGER.add_documents(self.session_id, chunks)
+            except Exception as ve:
+                log.warning("VectorStoreManager indexing notice", error=str(ve))
+
+            # 2. Maintain in-memory vector store & disk persistence
             if self.session_id in SESSION_VECTOR_STORES:
                 vector_store = SESSION_VECTOR_STORES[self.session_id]
                 vector_store.add_documents(chunks)
@@ -193,14 +233,16 @@ class ChatIngestor:
                 SESSION_VECTOR_STORES[self.session_id] = vector_store
                 log.info("Created new in-memory vector store", count=len(chunks), session_id=self.session_id)
 
-            search_kwargs = {"k": k}
-            retriever = vector_store.as_retriever(search_kwargs=search_kwargs)
-
             # Persist vector store to disk if persistence is enabled
             if self.persist:
                 persist_session_vector_store(self.session_id, vector_store, self.index_dir)
 
-            return retriever
+            # Return isolated retriever from VectorStoreManager or local store
+            try:
+                return VECTOR_STORE_MANAGER.get_retriever(self.session_id, k=k)
+            except Exception:
+                search_kwargs = {"k": k}
+                return vector_store.as_retriever(search_kwargs=search_kwargs)
 
         except Exception as e:
             log.error("Failed to build in-memory retriever", error=str(e))
