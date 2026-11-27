@@ -259,6 +259,12 @@
                         <span>Execution Mode</span>
                         <span class="text-zinc-900 font-mono font-medium">Asynchronous Pipeline</span>
                     </div>
+                    <div class="flex justify-between text-zinc-600">
+                        <span>Observability</span>
+                        <span class="text-emerald-700 font-mono font-medium flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> LangSmith Active
+                        </span>
+                    </div>
                 </div>
 
             </div>
@@ -589,6 +595,18 @@
                         </div>
                         <div class="flex items-center gap-2">
                             <div class="meta-badge text-xs"></div>
+                            <div class="feedback-actions flex items-center gap-1 border-l border-zinc-200 pl-2">
+                                <button onclick="submitUserFeedback(this, 1.0)" title="Helpful" class="text-zinc-400 hover:text-emerald-600 p-1 rounded hover:bg-zinc-100 transition">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="submitUserFeedback(this, 0.0)" title="Not helpful" class="text-zinc-400 hover:text-rose-600 p-1 rounded hover:bg-zinc-100 transition">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.769.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5"></path>
+                                    </svg>
+                                </button>
+                            </div>
                             <button onclick="copyResponse(this)" title="Copy text" class="text-zinc-500 hover:text-zinc-900 p-1.5 rounded-md hover:bg-zinc-100 transition">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
@@ -621,6 +639,35 @@
             });
         };
 
+        window.submitUserFeedback = async function(btn, score) {
+            const container = btn.closest(".bg-white");
+            const runId = container.getAttribute("data-run-id");
+            const feedbackActions = container.querySelector(".feedback-actions");
+            if (!runId) {
+                if (feedbackActions) feedbackActions.innerHTML = `<span class="text-zinc-400 text-xs font-mono">No trace</span>`;
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                const res = await fetch("/api/v1/feedback", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ run_id: runId, score: score, key: "user_satisfaction" })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (feedbackActions) {
+                        feedbackActions.innerHTML = `<span class="text-emerald-700 text-xs font-medium font-mono">Feedback logged</span>`;
+                    }
+                } else {
+                    if (feedbackActions) feedbackActions.innerHTML = `<span class="text-zinc-500 text-xs font-mono">Offline</span>`;
+                }
+            } catch (_) {
+                if (feedbackActions) feedbackActions.innerHTML = `<span class="text-zinc-500 text-xs font-mono">Saved</span>`;
+            }
+        };
+
         async function executeSyncChat(query) {
             const respDiv = createResponseElement();
             const contentDiv = respDiv.querySelector(".chat-content");
@@ -635,6 +682,9 @@
                 const data = await res.json();
 
                 if (res.ok) {
+                    if (data.run_id) {
+                        respDiv.setAttribute("data-run-id", data.run_id);
+                    }
                     contentDiv.innerHTML = marked.parse(data.answer);
                     badgeSpan.innerHTML = data.cache_hit 
                         ? `<span class="bg-zinc-100 text-zinc-800 border border-zinc-200 px-2.5 py-1 rounded-md font-mono text-xs font-medium">Cached &bull; ${data.latency_ms}ms</span>`
@@ -659,6 +709,7 @@
             let fullText = "";
             let isCached = false;
             let firstChunkReceived = false;
+            let streamRunId = null;
             const t0 = performance.now();
 
             try {
@@ -688,6 +739,10 @@
                         if (line.startsWith("data: ")) {
                             try {
                                 const parsed = JSON.parse(line.substring(6));
+                                if (parsed.run_id) {
+                                    streamRunId = parsed.run_id;
+                                    respDiv.setAttribute("data-run-id", streamRunId);
+                                }
                                 if (parsed.token) {
                                     if (!firstChunkReceived) {
                                         firstChunkReceived = true;
@@ -725,6 +780,8 @@
             } catch (err) {
                 contentDiv.innerHTML = `<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-sm font-medium">Stream interrupted: ${escapeHtml(err.message)}</div>`;
             }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 

@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.tracers.context import collect_runs
 
 from multi_doc_chat.src.document_ingestion.data_ingestion import (
     ChatIngestor,
@@ -21,6 +22,13 @@ from multi_doc_chat.model.models import (
     ChatResponse,
     IngestResponse,
     HealthResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+)
+from multi_doc_chat.observability import (
+    is_tracing_enabled,
+    get_langsmith_project,
+    record_feedback,
 )
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
@@ -144,6 +152,8 @@ async def health_check():
         model_name=llm_provider,
         embedding_provider=emb_provider,
         caching_enabled=True,
+        langsmith_tracing=is_tracing_enabled(),
+        langsmith_project=get_langsmith_project(),
     )
 
 
@@ -199,8 +209,8 @@ async def ingest_documents(
 @app.post("/api/v1/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    Standard question-answering with Semantic Caching.
-    Returns answer, latency in ms, and cache hit indicator.
+    Standard question-answering with Semantic Caching and LangSmith Trace Tracking.
+    Returns answer, latency in ms, cache hit indicator, and LangSmith Run ID.
     """
     start_time = time.perf_counter()
     rag = get_or_create_rag(request.session_id)
@@ -213,12 +223,14 @@ async def chat(request: ChatRequest):
         else:
             history_messages.append(AIMessage(content=msg.content))
 
-    # Check cache status prior to execution
-    cache_before_size = rag.cache.size() if rag.cache else 0
-    answer = await rag.ainvoke(request.query, chat_history=history_messages)
-    duration_ms = (time.perf_counter() - start_time) * 1000
+    # Trace run execution
+    run_id = None
+    with collect_runs() as cb:
+        answer = await rag.ainvoke(request.query, chat_history=history_messages)
+        if cb.traced_runs:
+            run_id = str(cb.traced_runs[0].id)
 
-    # If cache size did not grow and latency is extremely low (<50ms), it was a cache hit
+    duration_ms = (time.perf_counter() - start_time) * 1000
     cache_hit = duration_ms < 50.0
 
     return ChatResponse(
@@ -227,13 +239,14 @@ async def chat(request: ChatRequest):
         answer=answer,
         cache_hit=cache_hit,
         latency_ms=round(duration_ms, 2),
+        run_id=run_id,
     )
 
 
 @app.post("/api/v1/chat/stream")
 async def chat_stream(request: ChatRequest):
     """
-    Server-Sent Events (SSE) streaming endpoint.
+    Server-Sent Events (SSE) streaming endpoint with LangSmith Tracing.
     Streams answer tokens in real time directly from Groq LLM.
     """
     try:
@@ -266,10 +279,12 @@ async def chat_stream(request: ChatRequest):
 
             # Stream live tokens from LLM
             collected_tokens = []
-            async for token in rag.astream(request.query, chat_history=history_messages):
-                collected_tokens.append(token)
-                data = json.dumps({"token": token, "cached": False, "done": False})
-                yield f"data: {data}\n\n"
+            with collect_runs() as cb:
+                async for token in rag.astream(request.query, chat_history=history_messages):
+                    collected_tokens.append(token)
+                    data = json.dumps({"token": token, "cached": False, "done": False})
+                    yield f"data: {data}\n\n"
+                stream_run_id = str(cb.traced_runs[0].id) if cb.traced_runs else None
 
             # Store in cache once finished
             full_ans = "".join(collected_tokens)
@@ -277,12 +292,36 @@ async def chat_stream(request: ChatRequest):
                 emb = rag.embeddings.embed_query(request.query)
                 rag.cache.store(request.query, emb, full_ans)
 
-            yield f"data: {json.dumps({'done': True})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'run_id': stream_run_id})}\n\n"
         except Exception as e:
             log.error("Error during streaming response", error=str(e))
             yield f"data: {json.dumps({'token': f'❌ Error: {str(e)}', 'error': str(e), 'done': True})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/v1/feedback", response_model=FeedbackResponse)
+async def submit_feedback(request: FeedbackRequest):
+    """
+    Submit user evaluation or feedback score (e.g. thumbs-up/down) to LangSmith.
+    """
+    feedback_id = record_feedback(
+        run_id=request.run_id,
+        score=request.score,
+        key=request.key,
+        comment=request.comment,
+    )
+    if not feedback_id:
+        return FeedbackResponse(
+            success=False,
+            message="Feedback could not be recorded (LangSmith client unavailable or run not found).",
+        )
+
+    return FeedbackResponse(
+        success=True,
+        feedback_id=feedback_id,
+        message="Feedback successfully recorded in LangSmith.",
+    )
 
 
 @app.get("/api/v1/sessions")

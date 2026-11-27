@@ -29,6 +29,20 @@ class ChatResponse(BaseModel):
     answer: str
     cache_hit: bool = False
     latency_ms: float
+    run_id: Optional[str] = None
+
+
+class FeedbackRequest(BaseModel):
+    run_id: str = Field(..., description="LangSmith Run ID")
+    score: float = Field(..., ge=0.0, le=1.0, description="Score from 0.0 (negative) to 1.0 (positive)")
+    key: str = Field(default="user_satisfaction", description="Feedback metric key")
+    comment: Optional[str] = Field(default=None, description="Optional user comment or reason")
+
+
+class FeedbackResponse(BaseModel):
+    success: bool
+    feedback_id: Optional[str] = None
+    message: str
 
 
 class IngestResponse(BaseModel):
@@ -44,3 +58,5 @@ class HealthResponse(BaseModel):
     model_name: str
     embedding_provider: str
     caching_enabled: bool
+    langsmith_tracing: bool = False
+    langsmith_project: Optional[str] = None
