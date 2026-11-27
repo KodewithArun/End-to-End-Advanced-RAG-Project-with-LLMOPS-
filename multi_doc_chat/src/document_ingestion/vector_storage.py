@@ -117,7 +117,7 @@ class VectorStoreManager:
         try:
             if self.qdrant_url:
                 log.info("Connecting to remote Qdrant server", url=self.qdrant_url)
-                self.client = QdrantClient(url=self.qdrant_url, timeout=5.0)
+                self.client = QdrantClient(url=self.qdrant_url, timeout=5.0, check_compatibility=False)
                 # Test connection
                 self.client.get_collections()
             else:

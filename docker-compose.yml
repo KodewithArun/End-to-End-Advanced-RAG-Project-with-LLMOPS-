@@ -3,7 +3,7 @@ services:
     image: redis:8
     container_name: rag-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     restart: unless-stopped
     command: ["redis-server", "--save", "60", "1", "--loglevel", "notice"]
     volumes:

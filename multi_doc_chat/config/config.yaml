@@ -26,14 +26,14 @@ persistence:
 
 vector_storage:
   backend: "qdrant" # "qdrant" or "in_memory"
-  qdrant_url: null # e.g. "http://localhost:6333" or env QDRANT_URL; falls back to local disk
+  qdrant_url: "http://127.0.0.1:6333"
   local_path: "data/qdrant"
   collection_name: "documents_knowledge_base"
   retrieval_mode: "dense" # "dense" or "hybrid"
 
 distributed_cache:
   backend: "redis" # "redis" or "in_memory"
-  redis_url: null # e.g. "redis://localhost:6379/0" or env REDIS_URL; falls back to in-memory
+  redis_url: "redis://127.0.0.1:6380/0"
   ttl_seconds: 3600
   similarity_threshold: 0.88
   l1_exact_enabled: true
