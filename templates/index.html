@@ -1,19 +1,738 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="en" class="h-full bg-zinc-50 text-zinc-900">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Say Hello</title>
+    <title>Document Knowledge Workspace</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+        /* Clean Scrollbar */
+        .workspace-scroll::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .workspace-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .workspace-scroll::-webkit-scrollbar-thumb {
+            background: #d4d4d8;
+            border-radius: 9999px;
+        }
+        .workspace-scroll::-webkit-scrollbar-thumb:hover {
+            background: #a1a1aa;
+        }
+
+        /* Large, Comfortable Reading Typography */
+        .reading-prose {
+            font-size: 1.05rem; /* ~17px for clear comfortable reading */
+            line-height: 1.75;
+            color: #18181b;
+        }
+        .reading-prose p {
+            margin-bottom: 1rem;
+            line-height: 1.75;
+            color: #27272a;
+        }
+        .reading-prose p:last-child {
+            margin-bottom: 0;
+        }
+        .reading-prose strong {
+            font-weight: 700;
+            color: #09090b;
+        }
+        .reading-prose ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin-top: 0.75rem;
+            margin-bottom: 1rem;
+            color: #27272a;
+        }
+        .reading-prose ol {
+            list-style-type: decimal;
+            padding-left: 1.5rem;
+            margin-top: 0.75rem;
+            margin-bottom: 1rem;
+            color: #27272a;
+        }
+        .reading-prose li {
+            margin-bottom: 0.5rem;
+            line-height: 1.7;
+        }
+        .reading-prose h1, .reading-prose h2, .reading-prose h3, .reading-prose h4 {
+            font-weight: 700;
+            color: #09090b;
+            margin-top: 1.5rem;
+            margin-bottom: 0.65rem;
+            letter-spacing: -0.02em;
+        }
+        .reading-prose h1 { font-size: 1.4rem; }
+        .reading-prose h2 { font-size: 1.25rem; }
+        .reading-prose h3 { font-size: 1.125rem; }
+        .reading-prose blockquote {
+            border-left: 3px solid #cbd5e1;
+            padding-left: 1rem;
+            color: #475569;
+            margin-top: 0.85rem;
+            margin-bottom: 0.85rem;
+            font-style: italic;
+        }
+        .reading-prose code {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.35rem;
+            font-size: 0.9em;
+            border: 1px solid #e2e8f0;
+            font-weight: 500;
+        }
+        .reading-prose pre {
+            background-color: #18181b;
+            color: #f4f4f5;
+            border: 1px solid #27272a;
+            border-radius: 0.65rem;
+            padding: 1rem 1.15rem;
+            overflow-x: auto;
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.925rem;
+            line-height: 1.6;
+        }
+        .reading-prose pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: #f4f4f5;
+            font-weight: 400;
+        }
+        .reading-prose table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.95rem;
+        }
+        .reading-prose th, .reading-prose td {
+            border: 1px solid #e2e8f0;
+            padding: 0.65rem 0.9rem;
+            text-align: left;
+        }
+        .reading-prose th {
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: #0f172a;
+        }
+    </style>
 </head>
+<body class="h-full flex flex-col antialiased selection:bg-zinc-200 selection:text-zinc-900 font-sans bg-zinc-50 text-zinc-900">
 
-<body>
-    <h1>Say Hello</h1>
-    <form action="/hello" method="post">
-        <input type="text" name="name" placeholder="Enter your name">
-        <button type="submit">Say Hello</button>
-    </form>
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-zinc-200 bg-white/95 backdrop-blur sticky top-0 z-40 shrink-0 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            
+            <!-- Brand / Workspace Title -->
+            <div class="flex items-center space-x-3.5">
+                <div class="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-lg font-bold text-zinc-900 tracking-tight">Document Knowledge Workspace</h1>
+                    <p class="text-xs sm:text-sm text-zinc-500 hidden sm:block">In-Memory Semantic Index &bull; High Precision Synthesis</p>
+                </div>
+            </div>
 
+            <!-- Workspace Status & Session Actions -->
+            <div class="flex items-center space-x-3">
+                <!-- Status Indicator -->
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800">
+                    <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                    <span class="font-medium text-xs sm:text-sm">Workspace Ready</span>
+                </div>
+
+                <!-- Session Identifier & Reset -->
+                <div class="flex items-center gap-2 bg-zinc-100 border border-zinc-200 rounded-lg px-3 py-1.5">
+                    <span class="text-zinc-500 text-xs sm:text-sm">Session</span>
+                    <span id="session-display" class="font-mono text-zinc-800 font-semibold text-xs sm:text-sm">default</span>
+                    <button id="new-session-btn" title="Create a clean workspace session" class="ml-1 text-xs sm:text-sm font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 rounded px-2 py-0.5 transition">
+                        Reset
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- Workspace Main Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
+
+        <!-- Left Column: Document Repository & Ingestion (4 cols on lg) -->
+        <aside class="lg:col-span-4 flex flex-col space-y-5">
+            
+            <!-- Ingest Card -->
+            <div class="bg-white border border-zinc-200 rounded-2xl p-5 sm:p-6 flex flex-col shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm sm:text-base font-bold text-zinc-900 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        Document Ingestion
+                    </h2>
+                    <span id="doc-counter" class="text-xs sm:text-sm font-mono text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded">0 indexed</span>
+                </div>
+
+                <!-- Drag & Drop Target -->
+                <div id="drop-zone" class="border-2 border-dashed border-zinc-300 hover:border-zinc-500 transition-colors rounded-xl p-6 text-center cursor-pointer bg-zinc-50/70 hover:bg-zinc-50 group">
+                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt" class="hidden">
+                    <div class="w-11 h-11 mx-auto rounded-xl bg-white border border-zinc-200 flex items-center justify-center text-zinc-600 group-hover:text-zinc-900 shadow-sm transition-colors mb-3">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                    <span class="text-sm sm:text-base font-semibold text-zinc-800 block">Click or drag files here</span>
+                    <span class="text-xs sm:text-sm text-zinc-500 mt-1 block">Supported formats: PDF, DOCX, TXT</span>
+                </div>
+
+                <!-- Staged Files Queue -->
+                <div id="selected-files" class="mt-4 space-y-2 text-xs sm:text-sm text-zinc-700 max-h-40 overflow-y-auto workspace-scroll"></div>
+
+                <!-- Action Button -->
+                <button id="upload-btn" class="mt-5 w-full bg-zinc-900 hover:bg-black text-white font-semibold py-3 px-4 rounded-xl text-sm sm:text-base transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                    </svg>
+                    <span>Index Documents</span>
+                </button>
+
+                <!-- Status Feedback -->
+                <div id="upload-status" class="mt-3 text-xs sm:text-sm text-center hidden"></div>
+            </div>
+
+            <!-- Active Repository Summary -->
+            <div class="bg-white border border-zinc-200 rounded-2xl p-5 sm:p-6 flex-1 flex flex-col shadow-sm">
+                <div class="flex items-center justify-between mb-3 pb-3 border-b border-zinc-200">
+                    <h3 class="text-sm sm:text-base font-bold text-zinc-900 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                        </svg>
+                        Indexed Library
+                    </h3>
+                    <span id="chunks-badge" class="text-xs sm:text-sm bg-zinc-100 text-zinc-700 font-mono font-medium px-2.5 py-0.5 rounded">0 chunks</span>
+                </div>
+
+                <!-- Document List Container -->
+                <div id="indexed-files-list" class="flex-1 overflow-y-auto workspace-scroll space-y-2 text-xs sm:text-sm">
+                    <div id="empty-library-hint" class="py-8 text-center text-zinc-500">
+                        <p class="text-sm font-medium">No documents indexed in this session yet.</p>
+                        <p class="text-xs text-zinc-400 mt-1">Upload files above to begin.</p>
+                    </div>
+                </div>
+
+                <!-- Technical Properties (Restrained, no model branding) -->
+                <div class="mt-5 pt-4 border-t border-zinc-200 space-y-2 text-xs sm:text-sm">
+                    <div class="flex justify-between text-zinc-600">
+                        <span>Search Engine</span>
+                        <span class="text-zinc-900 font-mono font-medium">Semantic Vector Distance</span>
+                    </div>
+                    <div class="flex justify-between text-zinc-600">
+                        <span>Acceleration</span>
+                        <span class="text-zinc-900 font-mono font-medium">Cosine Similarity Cache</span>
+                    </div>
+                    <div class="flex justify-between text-zinc-600">
+                        <span>Execution Mode</span>
+                        <span class="text-zinc-900 font-mono font-medium">Asynchronous Pipeline</span>
+                    </div>
+                </div>
+
+            </div>
+
+        </aside>
+
+        <!-- Right Column: Document Inquiry & Reading Workspace (8 cols on lg) -->
+        <section class="lg:col-span-8 flex flex-col bg-white border border-zinc-200 rounded-2xl overflow-hidden min-h-[620px] lg:h-auto shadow-sm">
+            
+            <!-- Workspace Content Header -->
+            <div class="border-b border-zinc-200 px-6 py-4 bg-zinc-50/70 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                    </svg>
+                    <span class="text-sm sm:text-base font-bold text-zinc-900">Document Inquiries</span>
+                </div>
+
+                <div class="flex items-center gap-5 text-xs sm:text-sm">
+                    <!-- Stream Toggle -->
+                    <label class="flex items-center gap-2 cursor-pointer text-zinc-600 hover:text-zinc-900 transition select-none">
+                        <input type="checkbox" id="stream-toggle" checked class="rounded border-zinc-300 text-zinc-900 focus:ring-0 w-4 h-4">
+                        <span class="font-medium">Stream responses</span>
+                    </label>
+
+                    <span class="text-zinc-300">|</span>
+
+                    <!-- Clear History Button -->
+                    <button id="clear-btn" class="text-zinc-600 hover:text-zinc-900 font-medium transition flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- Reading Stream / Conversation Area -->
+            <div id="chat-messages" class="flex-1 p-6 sm:p-8 overflow-y-auto space-y-7 workspace-scroll">
+                
+                <!-- Welcome & Guidance State -->
+                <div id="initial-welcome" class="max-w-2xl mx-auto py-14 text-center">
+                    <div class="w-14 h-14 mx-auto rounded-2xl bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-700 mb-4 shadow-sm">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-base sm:text-lg font-bold text-zinc-900 tracking-tight">Ready for Document Analysis</h3>
+                    <p class="text-sm sm:text-base text-zinc-600 mt-2 max-w-lg mx-auto leading-relaxed">
+                        Upload your PDF, Word, or text files on the left panel to index them. Then enter any question below to extract answers directly from the source text.
+                    </p>
+
+                    <!-- Starter Prompt Chips -->
+                    <div class="mt-7 flex flex-wrap justify-center gap-2.5">
+                        <button onclick="usePrompt('Give an executive summary of the indexed documents.')" class="text-xs sm:text-sm font-medium bg-white hover:bg-zinc-50 text-zinc-700 hover:text-zinc-900 border border-zinc-200 hover:border-zinc-300 px-4 py-2 rounded-full transition shadow-sm">
+                            &ldquo;Give an executive summary&rdquo;
+                        </button>
+                        <button onclick="usePrompt('What are the primary conclusions and key takeaways?')" class="text-xs sm:text-sm font-medium bg-white hover:bg-zinc-50 text-zinc-700 hover:text-zinc-900 border border-zinc-200 hover:border-zinc-300 px-4 py-2 rounded-full transition shadow-sm">
+                            &ldquo;Primary conclusions & takeaways&rdquo;
+                        </button>
+                        <button onclick="usePrompt('List all critical dates, milestones, or statistics.')" class="text-xs sm:text-sm font-medium bg-white hover:bg-zinc-50 text-zinc-700 hover:text-zinc-900 border border-zinc-200 hover:border-zinc-300 px-4 py-2 rounded-full transition shadow-sm">
+                            &ldquo;Key dates, milestones, & statistics&rdquo;
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Query Input Bar -->
+            <div class="border-t border-zinc-200 p-5 bg-zinc-50/50 shrink-0">
+                <form id="chat-form" class="relative flex items-center">
+                    <input 
+                        type="text" 
+                        id="query-input" 
+                        placeholder="Search or ask a question regarding your documents..." 
+                        autocomplete="off"
+                        class="w-full bg-white border border-zinc-300 focus:border-zinc-900 focus:outline-none rounded-xl pl-5 pr-28 py-3.5 text-sm sm:text-base text-zinc-900 placeholder-zinc-400 transition duration-150 shadow-sm"
+                    >
+                    <button 
+                        type="submit" 
+                        id="send-btn" 
+                        class="absolute right-2 top-2 bottom-2 bg-zinc-900 hover:bg-black text-white font-semibold px-5 rounded-lg text-sm sm:text-base transition duration-150 flex items-center gap-1.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                    >
+                        <span>Query</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </button>
+                </form>
+                <div class="flex items-center justify-between mt-2.5 px-1 text-xs text-zinc-500">
+                    <span>Press <kbd class="font-mono bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200 text-zinc-600 font-semibold">Enter</kbd> to submit query</span>
+                    <span id="char-status"></span>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Client Logic -->
+    <script>
+        // Session ID Management
+        let sessionId = localStorage.getItem("rag_session_id");
+        if (!sessionId) {
+            sessionId = "session_" + Math.random().toString(36).substring(2, 10);
+            localStorage.setItem("rag_session_id", sessionId);
+        }
+        document.getElementById("session-display").innerText = sessionId;
+
+        let chatHistory = [];
+        let indexedFiles = [];
+
+        const dropZone = document.getElementById("drop-zone");
+        const fileInput = document.getElementById("file-input");
+        const selectedFilesDiv = document.getElementById("selected-files");
+        const uploadBtn = document.getElementById("upload-btn");
+        const uploadStatus = document.getElementById("upload-status");
+        const chatMessages = document.getElementById("chat-messages");
+        const chatForm = document.getElementById("chat-form");
+        const queryInput = document.getElementById("query-input");
+        const sendBtn = document.getElementById("send-btn");
+        const streamToggle = document.getElementById("stream-toggle");
+        const clearBtn = document.getElementById("clear-btn");
+        const docCounter = document.getElementById("doc-counter");
+        const chunksBadge = document.getElementById("chunks-badge");
+        const indexedFilesList = document.getElementById("indexed-files-list");
+
+        // New Session Reset
+        document.getElementById("new-session-btn").onclick = () => {
+            sessionId = "session_" + Math.random().toString(36).substring(2, 10);
+            localStorage.setItem("rag_session_id", sessionId);
+            document.getElementById("session-display").innerText = sessionId;
+            chatHistory = [];
+            indexedFiles = [];
+            docCounter.innerText = "0 indexed";
+            chunksBadge.innerText = "0 chunks";
+            indexedFilesList.innerHTML = `
+                <div id="empty-library-hint" class="py-8 text-center text-zinc-500">
+                    <p class="text-sm font-medium">No documents indexed in this session yet.</p>
+                    <p class="text-xs text-zinc-400 mt-1">Upload files above to begin.</p>
+                </div>`;
+            renderEmptyWelcome();
+            uploadStatus.classList.add("hidden");
+            selectedFilesDiv.innerHTML = "";
+            fileInput.value = "";
+        };
+
+        // File Drag & Drop Handlers
+        dropZone.onclick = () => fileInput.click();
+        dropZone.ondragover = (e) => {
+            e.preventDefault();
+            dropZone.classList.add("border-zinc-600", "bg-zinc-100/70");
+        };
+        dropZone.ondragleave = () => {
+            dropZone.classList.remove("border-zinc-600", "bg-zinc-100/70");
+        };
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove("border-zinc-600", "bg-zinc-100/70");
+            fileInput.files = e.dataTransfer.files;
+            updateSelectedFiles();
+        };
+        fileInput.onchange = updateSelectedFiles;
+
+        function updateSelectedFiles() {
+            selectedFilesDiv.innerHTML = "";
+            if (!fileInput.files || fileInput.files.length === 0) return;
+
+            for (let f of fileInput.files) {
+                const sizeKb = (f.size / 1024).toFixed(1);
+                selectedFilesDiv.innerHTML += `
+                    <div class="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                        <span class="truncate font-mono text-xs sm:text-sm text-zinc-800 font-medium max-w-[210px]">${escapeHtml(f.name)}</span>
+                        <span class="text-xs text-zinc-500 font-mono">${sizeKb} KB</span>
+                    </div>`;
+            }
+        }
+
+        // Upload and Ingest Handler
+        uploadBtn.onclick = async () => {
+            if (!fileInput.files.length) {
+                alert("Please select at least one document to index.");
+                return;
+            }
+
+            uploadBtn.disabled = true;
+            uploadStatus.classList.remove("hidden");
+            uploadStatus.innerHTML = `
+                <div class="flex items-center justify-center gap-2 text-zinc-600 font-medium">
+                    <svg class="animate-spin h-4 w-4 text-zinc-700" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Extracting and indexing text chunks...</span>
+                </div>`;
+
+            const formData = new FormData();
+            for (let f of fileInput.files) {
+                formData.append("files", f);
+            }
+            formData.append("session_id", sessionId);
+
+            try {
+                const res = await fetch("/api/v1/ingest", { method: "POST", body: formData });
+                const data = await res.json();
+
+                if (res.ok) {
+                    uploadStatus.innerHTML = `<span class="text-emerald-700 font-semibold">Successfully indexed ${data.files.length} file(s) (${data.chunks_count} chunks)</span>`;
+                    docCounter.innerText = `${data.files.length} indexed`;
+                    chunksBadge.innerText = `${data.chunks_count} chunks`;
+                    
+                    // Render Indexed Files List
+                    indexedFilesList.innerHTML = "";
+                    data.files.forEach(filename => {
+                        indexedFilesList.innerHTML += `
+                            <div class="flex items-center justify-between p-2.5 rounded-lg bg-zinc-50 border border-zinc-200">
+                                <div class="flex items-center gap-2 truncate">
+                                    <svg class="w-4 h-4 text-zinc-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    <span class="truncate font-mono text-xs sm:text-sm text-zinc-800 font-medium">${escapeHtml(filename)}</span>
+                                </div>
+                                <span class="text-xs text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded font-semibold">Ready</span>
+                            </div>`;
+                    });
+                } else {
+                    uploadStatus.innerHTML = `<span class="text-rose-700 font-medium">${escapeHtml(data.detail || "Indexing failed")}</span>`;
+                }
+            } catch (err) {
+                uploadStatus.innerHTML = `<span class="text-rose-700 font-medium">Network error: ${escapeHtml(err.message)}</span>`;
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        };
+
+        // Clear Workspace History
+        clearBtn.onclick = () => {
+            chatHistory = [];
+            renderEmptyWelcome();
+        };
+
+        function renderEmptyWelcome() {
+            chatMessages.innerHTML = `
+                <div id="initial-welcome" class="max-w-2xl mx-auto py-14 text-center">
+                    <div class="w-14 h-14 mx-auto rounded-2xl bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-700 mb-4 shadow-sm">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-base sm:text-lg font-bold text-zinc-900 tracking-tight">Ready for Document Analysis</h3>
+                    <p class="text-sm sm:text-base text-zinc-600 mt-2 max-w-lg mx-auto leading-relaxed">
+                        Upload your PDF, Word, or text files on the left panel to index them. Then enter any question below to extract answers directly from the source text.
+                    </p>
+                    <div class="mt-7 flex flex-wrap justify-center gap-2.5">
+                        <button onclick="usePrompt('Give an executive summary of the indexed documents.')" class="text-xs sm:text-sm font-medium bg-white hover:bg-zinc-50 text-zinc-700 hover:text-zinc-900 border border-zinc-200 hover:border-zinc-300 px-4 py-2 rounded-full transition shadow-sm">
+                            &ldquo;Give an executive summary&rdquo;
+                        </button>
+                        <button onclick="usePrompt('What are the primary conclusions and key takeaways?')" class="text-xs sm:text-sm font-medium bg-white hover:bg-zinc-50 text-zinc-700 hover:text-zinc-900 border border-zinc-200 hover:border-zinc-300 px-4 py-2 rounded-full transition shadow-sm">
+                            &ldquo;Primary conclusions & takeaways&rdquo;
+                        </button>
+                        <button onclick="usePrompt('List all critical dates, milestones, or statistics.')" class="text-xs sm:text-sm font-medium bg-white hover:bg-zinc-50 text-zinc-700 hover:text-zinc-900 border border-zinc-200 hover:border-zinc-300 px-4 py-2 rounded-full transition shadow-sm">
+                            &ldquo;Key dates, milestones, & statistics&rdquo;
+                        </button>
+                    </div>
+                </div>`;
+        }
+
+        // Chip Prompt Shortcut
+        window.usePrompt = function(promptText) {
+            queryInput.value = promptText;
+            queryInput.focus();
+        };
+
+        // Form Submission
+        chatForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            // Remove welcome view if present
+            const welcome = document.getElementById("initial-welcome");
+            if (welcome) welcome.remove();
+
+            appendHumanMessage(query);
+            queryInput.value = "";
+            setGenerating(true);
+
+            try {
+                if (streamToggle.checked) {
+                    await executeStreamingChat(query);
+                } else {
+                    await executeSyncChat(query);
+                }
+            } finally {
+                setGenerating(false);
+            }
+        };
+
+        function setGenerating(isGenerating) {
+            queryInput.disabled = isGenerating;
+            sendBtn.disabled = isGenerating;
+            if (!isGenerating) {
+                queryInput.focus();
+            }
+        }
+
+        function appendHumanMessage(text) {
+            const div = document.createElement("div");
+            div.className = "flex justify-end";
+            div.innerHTML = `
+                <div class="max-w-2xl bg-zinc-100 border border-zinc-200 text-zinc-900 rounded-2xl px-5 py-3.5 text-sm sm:text-base leading-relaxed shadow-sm">
+                    <div class="text-xs font-mono uppercase tracking-wider text-zinc-500 font-semibold mb-1">Inquiry</div>
+                    <div class="font-medium text-zinc-900">${escapeHtml(text)}</div>
+                </div>`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function createResponseElement() {
+            const div = document.createElement("div");
+            div.className = "flex justify-start max-w-3xl";
+            div.innerHTML = `
+                <div class="w-full bg-white border border-zinc-200 rounded-2xl p-6 sm:p-7 text-zinc-900 shadow-sm">
+                    <div class="flex items-center justify-between pb-3 mb-4 border-b border-zinc-200">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-zinc-900"></span>
+                            <span class="text-xs sm:text-sm font-mono text-zinc-700 font-semibold uppercase tracking-wider">Document Synthesis</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="meta-badge text-xs"></div>
+                            <button onclick="copyResponse(this)" title="Copy text" class="text-zinc-500 hover:text-zinc-900 p-1.5 rounded-md hover:bg-zinc-100 transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="reading-prose chat-content">
+                        <span class="inline-flex items-center gap-2 text-zinc-500 text-sm sm:text-base py-1">
+                            <svg class="animate-spin h-4 w-4 text-zinc-600" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                            <span>Synthesizing response from documents...</span>
+                        </span>
+                    </div>
+                </div>`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return div;
+        }
+
+        window.copyResponse = function(btn) {
+            const container = btn.closest(".bg-white");
+            const content = container.querySelector(".chat-content").innerText;
+            navigator.clipboard.writeText(content).then(() => {
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = `<span class="text-emerald-600 text-xs font-semibold">Copied!</span>`;
+                setTimeout(() => btn.innerHTML = originalHtml, 2000);
+            });
+        };
+
+        async function executeSyncChat(query) {
+            const respDiv = createResponseElement();
+            const contentDiv = respDiv.querySelector(".chat-content");
+            const badgeSpan = respDiv.querySelector(".meta-badge");
+
+            try {
+                const res = await fetch("/api/v1/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId, query: query, chat_history: chatHistory })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    contentDiv.innerHTML = marked.parse(data.answer);
+                    badgeSpan.innerHTML = data.cache_hit 
+                        ? `<span class="bg-zinc-100 text-zinc-800 border border-zinc-200 px-2.5 py-1 rounded-md font-mono text-xs font-medium">Cached &bull; ${data.latency_ms}ms</span>`
+                        : `<span class="bg-zinc-100 text-zinc-600 border border-zinc-200 px-2.5 py-1 rounded-md font-mono text-xs">${data.latency_ms}ms</span>`;
+
+                    chatHistory.push({ role: "human", content: query });
+                    chatHistory.push({ role: "ai", content: data.answer });
+                } else {
+                    contentDiv.innerHTML = `<div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm font-medium">${escapeHtml(data.detail || "Unable to retrieve relevant document passages.")}</div>`;
+                }
+            } catch (err) {
+                contentDiv.innerHTML = `<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-sm font-medium">Network error: ${escapeHtml(err.message)}</div>`;
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function executeStreamingChat(query) {
+            const respDiv = createResponseElement();
+            const contentDiv = respDiv.querySelector(".chat-content");
+            const badgeSpan = respDiv.querySelector(".meta-badge");
+
+            let fullText = "";
+            let isCached = false;
+            let firstChunkReceived = false;
+            const t0 = performance.now();
+
+            try {
+                const res = await fetch("/api/v1/chat/stream", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId, query: query, chat_history: chatHistory })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    contentDiv.innerHTML = `<div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm font-medium">${escapeHtml(err.detail || "Error generating document answer.")}</div>`;
+                    return;
+                }
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split("\n\n");
+
+                    for (let line of lines) {
+                        if (line.startsWith("data: ")) {
+                            try {
+                                const parsed = JSON.parse(line.substring(6));
+                                if (parsed.token) {
+                                    if (!firstChunkReceived) {
+                                        firstChunkReceived = true;
+                                        contentDiv.innerHTML = "";
+                                    }
+                                    fullText += parsed.token;
+                                    contentDiv.innerHTML = marked.parse(fullText);
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
+                                if (parsed.cached) {
+                                    isCached = true;
+                                }
+                                if (parsed.error) {
+                                    contentDiv.innerHTML = `<div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm font-medium">${escapeHtml(parsed.error)}</div>`;
+                                }
+                            } catch (_) {}
+                        }
+                    }
+                }
+
+                const t1 = performance.now();
+                const elapsed = Math.round(t1 - t0);
+
+                if (!fullText.trim()) {
+                    contentDiv.innerHTML = `<div class="p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-600 text-sm">No matching passages found. Please ensure documents have been indexed.</div>`;
+                } else {
+                    badgeSpan.innerHTML = isCached
+                        ? `<span class="bg-zinc-100 text-zinc-800 border border-zinc-200 px-2.5 py-1 rounded-md font-mono text-xs font-medium">Cached &bull; ${elapsed}ms</span>`
+                        : `<span class="bg-zinc-100 text-zinc-600 border border-zinc-200 px-2.5 py-1 rounded-md font-mono text-xs">Streamed &bull; ${elapsed}ms</span>`;
+
+                    chatHistory.push({ role: "human", content: query });
+                    chatHistory.push({ role: "ai", content: fullText });
+                }
+
+            } catch (err) {
+                contentDiv.innerHTML = `<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-sm font-medium">Stream interrupted: ${escapeHtml(err.message)}</div>`;
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.innerText = text;
+            return div.innerHTML;
+        }
+    </script>
 </body>
-
 </html>
