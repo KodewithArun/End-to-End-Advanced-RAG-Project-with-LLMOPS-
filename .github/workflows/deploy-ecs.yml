@@ -1,0 +1,89 @@
+name: Continuous Deployment to AWS ECS (Fargate)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker Hub image tag to deploy (e.g. latest, develop, sha-xxxxxxx)"
+        required: false
+        default: "develop"
+
+concurrency:
+  group: ecs-deployment
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+  ECS_CLUSTER: production-rag-cluster
+  ECS_SERVICE: production-rag-service
+  ECS_TASK_DEFINITION: deploy/aws/task-definition.json
+  CONTAINER_NAME: rag-app
+
+jobs:
+  deploy:
+    name: Deploy Container to AWS ECS Fargate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Determine Target Image
+        id: image-tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAG="latest"
+          else
+            TAG="develop"
+          fi
+          IMAGE="contactwitharunlaudar/rag-app:${TAG}"
+          echo "deploy_image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "🚀 Selected Deployment Image: ${IMAGE}"
+
+      - name: Render AWS ECS Task Definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.image-tag.outputs.deploy_image }}
+          environment-variables: |
+            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}
+            LANGCHAIN_PROJECT=${{ secrets.LANGCHAIN_PROJECT || 'end-to-end-advanced-rag-with-llmops' }}
+            LANGCHAIN_ENDPOINT=${{ secrets.LANGCHAIN_ENDPOINT || 'https://api.smith.langchain.com' }}
+            LANGCHAIN_TRACING_V2=${{ secrets.LANGCHAIN_TRACING_V2 || 'true' }}
+            REDIS_URL=${{ secrets.REDIS_URL }}
+            QDRANT_URL=${{ secrets.QDRANT_URL }}
+
+      - name: Deploy Task Definition to AWS ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+      - name: Deployment Summary & Status
+        if: always()
+        run: |
+          echo "=========================================================="
+          echo "🎉 AWS ECS FARGATE DEPLOYMENT COMPLETED!"
+          echo "Cluster: ${{ env.ECS_CLUSTER }}"
+          echo "Service: ${{ env.ECS_SERVICE }}"
+          echo "Image:   ${{ steps.image-tag.outputs.deploy_image }}"
+          echo "=========================================================="
